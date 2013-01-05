@@ -29,9 +29,6 @@
 #define MAP_RECTANGLE PathRectangle(0, 0,  gs->mapx, gs->mapy, false)
 
 namespace QTPFS {
-	const float PathManager::MIN_SPEEDMOD_VALUE = 0.0f;
-	const float PathManager::MAX_SPEEDMOD_VALUE = 2.0f;
-
 	struct PMLoadScreen {
 		PMLoadScreen(): loading(true) {}
 		~PMLoadScreen() { assert(loadMessages.empty()); }
@@ -188,6 +185,16 @@ void QTPFS::PathManager::Load() {
 		pfsCheckSum = mapCheckSum ^ modCheckSum;
 
 		for (unsigned int layerNum = 0; layerNum < nodeLayers.size(); layerNum++) {
+			if (moveDefHandler->moveDefs[layerNum]->unitDefRefCount == 0)
+				continue;
+
+			#ifndef QTPFS_CONSERVATIVE_NEIGHBOR_CACHE_UPDATES
+			if (haveCacheDir) {
+				// if cache-dir exists, must set node relations after de-serializing its trees
+				nodeLayers[layerNum].ExecNodeNeighborCacheUpdates(MAP_RECTANGLE, numTerrainChanges);
+			}
+			#endif
+
 			pfsCheckSum ^= nodeTrees[layerNum]->GetCheckSum();
 			maxNumLeafNodes = std::max(nodeLayers[layerNum].GetNumLeafNodes(), maxNumLeafNodes);
 		}
@@ -244,7 +251,7 @@ void QTPFS::PathManager::InitNodeLayersThreaded(const PathRectangle& rect) {
 	streflop::streflop_init<streflop::Simple>();
 
 	char loadMsg[512] = {'\0'};
-	const char* fmtString = "[PathManager::%s] using %u threads for %u node-layers (cached? %s)";
+	const char* fmtString = "[PathManager::%s] using %u threads for %u node-layers (%s)";
 
 	#ifdef QTPFS_OPENMP_ENABLED
 	{
@@ -256,7 +263,7 @@ void QTPFS::PathManager::InitNodeLayersThreaded(const PathRectangle& rect) {
 			// too many and esp. too few threads would be wasteful
 			//
 			// TODO: OpenMP needs project-global linking changes
-			sprintf(loadMsg, fmtString, __FUNCTION__, omp_get_num_threads(), nodeLayers.size(), (haveCacheDir? "true": "false"));
+			sprintf(loadMsg, fmtString, __FUNCTION__, omp_get_num_threads(), nodeLayers.size(), (haveCacheDir? "cached": "uncached"));
 			pmLoadScreen.AddLoadMessage(loadMsg);
 		}
 
@@ -293,7 +300,7 @@ void QTPFS::PathManager::InitNodeLayersThreaded(const PathRectangle& rect) {
 	}
 	#else
 	{
-		sprintf(loadMsg, fmtString, __FUNCTION__, GetNumThreads(), nodeLayers.size(), (haveCacheDir? "true": "false"));
+		sprintf(loadMsg, fmtString, __FUNCTION__, GetNumThreads(), nodeLayers.size(), (haveCacheDir? "cached": "uncached"));
 		pmLoadScreen.AddLoadMessage(loadMsg);
 
 		SpawnBoostThreads(&PathManager::InitNodeLayersThread, rect);
@@ -343,6 +350,10 @@ void QTPFS::PathManager::InitNodeLayersThread(
 
 void QTPFS::PathManager::InitNodeLayer(unsigned int layerNum, const PathRectangle& r) {
 	nodeTrees[layerNum] = new QTPFS::QTNode(NULL,  0,  r.x1, r.z1,  r.x2, r.z2);
+
+	if (moveDefHandler->moveDefs[layerNum]->unitDefRefCount == 0)
+		return;
+
 	nodeLayers[layerNum].Init(layerNum);
 	nodeLayers[layerNum].RegisterNode(nodeTrees[layerNum]);
 }
@@ -406,10 +417,10 @@ void QTPFS::PathManager::UpdateNodeLayer(unsigned int layerNum, const PathRectan
 	PathRectangle mr; mr.ForceTesselation(r.ForceTesselation());
 	PathRectangle ur; ur.ForceTesselation(r.ForceTesselation());
 
-	mr.x1 = std::max(r.x1 - md->xsizeh,        0);
-	mr.z1 = std::max(r.z1 - md->zsizeh,        0);
-	mr.x2 = std::min(r.x2 + md->xsizeh, gs->mapx);
-	mr.z2 = std::min(r.z2 + md->zsizeh, gs->mapy);
+	mr.x1 = std::max((r.x1 - md->xsizeh) - int(QTNode::MIN_SIZE_X >> 1),        0);
+	mr.z1 = std::max((r.z1 - md->zsizeh) - int(QTNode::MIN_SIZE_Z >> 1),        0);
+	mr.x2 = std::min((r.x2 + md->xsizeh) + int(QTNode::MIN_SIZE_X >> 1), gs->mapx);
+	mr.z2 = std::min((r.z2 + md->zsizeh) + int(QTNode::MIN_SIZE_Z >> 1), gs->mapy);
 	ur.x1 = mr.x1;
 	ur.z1 = mr.z1;
 	ur.x2 = mr.x2;
@@ -441,10 +452,10 @@ void QTPFS::PathManager::QueueNodeLayerUpdates(const PathRectangle& r) {
 		PathRectangle mr; mr.ForceTesselation(r.ForceTesselation());
 		// PathRectangle ur; ur.ForceTesselation(r.ForceTesselation());
 
-		mr.x1 = std::max(r.x1 - md->xsizeh,        0);
-		mr.z1 = std::max(r.z1 - md->zsizeh,        0);
-		mr.x2 = std::min(r.x2 + md->xsizeh, gs->mapx);
-		mr.z2 = std::min(r.z2 + md->zsizeh, gs->mapy);
+		mr.x1 = std::max((r.x1 - md->xsizeh) - int(QTNode::MIN_SIZE_X >> 1),        0);
+		mr.z1 = std::max((r.z1 - md->zsizeh) - int(QTNode::MIN_SIZE_Z >> 1),        0);
+		mr.x2 = std::min((r.x2 + md->xsizeh) + int(QTNode::MIN_SIZE_X >> 1), gs->mapx);
+		mr.z2 = std::min((r.z2 + md->zsizeh) + int(QTNode::MIN_SIZE_Z >> 1), gs->mapy);
 
 		nodeLayers[layerNum].QueueUpdate(mr, md);
 	}
@@ -507,15 +518,14 @@ std::string QTPFS::PathManager::GetCacheDirName(boost::uint32_t mapCheckSum, boo
 }
 
 void QTPFS::PathManager::Serialize(const std::string& cacheFileDir) {
-	std::vector<std::string> fileNames(nodeTrees.size());
-	std::vector<std::fstream*> fileStreams(nodeTrees.size());
+	std::vector<std::string> fileNames(nodeTrees.size(), "");
+	std::vector<std::fstream*> fileStreams(nodeTrees.size(), NULL);
+	std::vector<unsigned int> fileSizes(nodeTrees.size(), 0);
 
-	if (!FileSystem::DirExists(cacheFileDir)) {
+	if (!haveCacheDir) {
 		FileSystem::CreateDirectory(cacheFileDir);
 		assert(FileSystem::DirExists(cacheFileDir));
 	}
-
-	bool readMode = false;
 
 	#ifndef NDEBUG
 	char loadMsg[512] = {'\0'};
@@ -524,12 +534,45 @@ void QTPFS::PathManager::Serialize(const std::string& cacheFileDir) {
 
 	// TODO: compress the tree cache-files?
 	for (unsigned int i = 0; i < nodeTrees.size(); i++) {
-		fileNames[i] = cacheFileDir + "tree" + IntToString(i, "%02x") + "-" + moveDefHandler->moveDefs[i]->name;
+		const MoveDef* md = moveDefHandler->moveDefs[i];
+
+		if (md->unitDefRefCount == 0)
+			continue;
+
+		fileNames[i] = cacheFileDir + "tree" + IntToString(i, "%02x") + "-" + md->name;
 		fileStreams[i] = new std::fstream();
 
-		if ((readMode = FileSystem::FileExists(fileNames[i]))) {
+		if (haveCacheDir) {
+			#ifdef QTPFS_CACHE_XACCESS
+			{
+				// FIXME: lock fileNames[i] instead of doing this
+				// fstreams can not be easily locked however, see
+				// http://stackoverflow.com/questions/839856/
+				while (!FileSystem::FileExists(fileNames[i] + "-tmp")) {
+					boost::this_thread::sleep(boost::posix_time::millisec(100));
+				}
+				while (FileSystem::GetFileSize(fileNames[i] + "-tmp") != sizeof(unsigned int)) {
+					boost::this_thread::sleep(boost::posix_time::millisec(100));
+				}
+
+				fileStreams[i]->open((fileNames[i] + "-tmp").c_str(), std::ios::in | std::ios::binary);
+				fileStreams[i]->read(reinterpret_cast<char*>(&fileSizes[i]), sizeof(unsigned int));
+				fileStreams[i]->close();
+
+				while (!FileSystem::FileExists(fileNames[i])) {
+					boost::this_thread::sleep(boost::posix_time::millisec(100));
+				}
+				while (FileSystem::GetFileSize(fileNames[i]) != fileSizes[i]) {
+					boost::this_thread::sleep(boost::posix_time::millisec(100));
+				}
+			}
+			#else
+			assert(FileSystem::FileExists(fileNames[i]));
+			#endif
+
 			// read fileNames[i] into nodeTrees[i]
 			fileStreams[i]->open(fileNames[i].c_str(), std::ios::in | std::ios::binary);
+			assert(fileStreams[i]->good());
 			assert(nodeTrees[i]->IsLeaf());
 		} else {
 			// write nodeTrees[i] into fileNames[i]
@@ -537,16 +580,26 @@ void QTPFS::PathManager::Serialize(const std::string& cacheFileDir) {
 		}
 
 		#ifndef NDEBUG
-		sprintf(loadMsg, fmtString, __FUNCTION__, i, moveDefHandler->moveDefs[i]->name.c_str());
+		sprintf(loadMsg, fmtString, __FUNCTION__, i, md->name.c_str());
 		pmLoadScreen.AddLoadMessage(loadMsg);
 		#endif
 
 		serializingNodeLayer = &nodeLayers[i];
-		nodeTrees[i]->Serialize(*fileStreams[i], readMode);
+		nodeTrees[i]->Serialize(*fileStreams[i], &fileSizes[i], haveCacheDir);
 		serializingNodeLayer = NULL;
 
 		fileStreams[i]->flush();
 		fileStreams[i]->close();
+
+		#ifdef QTPFS_CACHE_XACCESS
+		if (!haveCacheDir) {
+			// signal any other (concurrently loading) Spring processes; needed for validation-tests
+			fileStreams[i]->open((fileNames[i] + "-tmp").c_str(), std::ios::out | std::ios::binary);
+			fileStreams[i]->write(reinterpret_cast<const char*>(&fileSizes[i]), sizeof(unsigned int));
+			fileStreams[i]->flush();
+			fileStreams[i]->close();
+		}
+		#endif
 
 		delete fileStreams[i];
 	}
@@ -981,7 +1034,7 @@ float3 QTPFS::PathManager::NextWayPoint(
 	unsigned int minPointIdx = livePath->GetNextPointIndex();
 	unsigned int nxtPointIdx = 1;
 
-	for (unsigned int i = (livePath->GetNextPointIndex() * 1); i < (livePath->NumPoints() - 1); i++) {
+	for (unsigned int i = (livePath->GetNextPointIndex()); i < (livePath->NumPoints() - 1); i++) {
 		const float radiusSq = (point - livePath->GetPoint(i)).SqLength2D();
 
 		// find waypoints <p0> and <p1> such that <point> is

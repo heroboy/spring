@@ -61,13 +61,13 @@ struct S3DModelPiece {
 	const CollisionVolume* GetCollisionVolume() const { return colvol; }
 	      CollisionVolume* GetCollisionVolume()       { return colvol; }
 
-	unsigned int GetChildCount() const { return childs.size(); }
-	S3DModelPiece* GetChild(unsigned int i) const { return childs[i]; }
+	unsigned int GetChildCount() const { return children.size(); }
+	S3DModelPiece* GetChild(unsigned int i) const { return children[i]; }
 
 public:
 	std::string name;
 	std::string parentName;
-	std::vector<S3DModelPiece*> childs;
+	std::vector<S3DModelPiece*> children;
 
 	S3DModel* model;
 	S3DModelPiece* parent;
@@ -87,6 +87,7 @@ public:
 };
 
 
+
 struct S3DModel
 {
 	S3DModel()
@@ -104,6 +105,7 @@ struct S3DModel
 
 		, radius(0.0f)
 		, height(0.0f)
+		, drawRadius(0.0f)
 
 		, mins(10000.0f, 10000.0f, 10000.0f)
 		, maxs(-10000.0f, -10000.0f, -10000.0f)
@@ -134,6 +136,7 @@ public:
 
 	float radius;
 	float height;
+	float drawRadius;
 
 	float3 mins;
 	float3 maxs;
@@ -155,8 +158,13 @@ struct LocalModelPiece
 	LocalModelPiece(const S3DModelPiece* piece);
 	~LocalModelPiece();
 
-	void AddChild(LocalModelPiece* c) { childs.push_back(c); }
+	void AddChild(LocalModelPiece* c) { children.push_back(c); }
 	void SetParent(LocalModelPiece* p) { parent = p; }
+
+	void SetLModelPieceIndex(unsigned int idx) { lmodelPieceIndex = idx; }
+	void SetScriptPieceIndex(unsigned int idx) { scriptPieceIndex = idx; }
+	unsigned int GetLModelPieceIndex() const { return lmodelPieceIndex; }
+	unsigned int GetScriptPieceIndex() const { return scriptPieceIndex; }
 
 	void Draw() const;
 	void DrawLOD(unsigned int lod) const;
@@ -199,12 +207,14 @@ public:
 	bool scriptSetVisible;  // TODO: add (visibility) maxradius!
 	bool identityTransform; // true IFF pieceSpaceMat (!) equals identity
 
+	unsigned int lmodelPieceIndex; // index of this piece into LocalModel::pieces
+	unsigned int scriptPieceIndex; // index of this piece into UnitScript::pieces
 	unsigned int dispListID;
 
 	const S3DModelPiece* original;
 	const LocalModelPiece* parent;
 
-	std::vector<LocalModelPiece*> childs;
+	std::vector<LocalModelPiece*> children;
 	std::vector<unsigned int> lodDispLists;
 };
 
@@ -231,7 +241,8 @@ struct LocalModel
 		pieces.clear();
 	}
 
-	LocalModelPiece* GetPiece(unsigned int i) const { return pieces[i]; }
+	bool HasPiece(unsigned int i) const { return (i < pieces.size()); }
+	LocalModelPiece* GetPiece(unsigned int i) const { assert(HasPiece(i)); return pieces[i]; }
 	LocalModelPiece* GetRoot() const { return GetPiece(0); }
 
 	void Draw() const { DrawPieces(); }

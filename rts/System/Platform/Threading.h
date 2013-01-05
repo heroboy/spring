@@ -53,6 +53,8 @@ namespace Threading {
 	inline void SimThreadCount(unsigned stc) { simThreadCount = stc; }
 	inline unsigned SimThreadCount() { return simThreadCount; }
 
+	boost::uint32_t GetAvailableCoresMask();
+
 	/**
 	 * Inform the OS kernel that we are a cpu-intensive task
 	 */

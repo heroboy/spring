@@ -1,6 +1,5 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "System/mmgr.h"
 
 #include "DecalsDrawerGL4.h"
 #include "Game/Camera.h"
@@ -74,11 +73,19 @@ struct SGLSLDecal {
 };
 
 struct SGLSLGroundLighting {
+#ifdef _MSC_VER
+	__declspec(align(16)) float3 ambientColor;
+	__declspec(align(16))float3 diffuseColor;
+	__declspec(align(16))float3 specularColor;
+	__declspec(align(16))float3 dir;
+	__declspec(align(16))float3 fogColor;
+#else
 	float3 ambientColor __attribute__ ((aligned (16)));
 	float3 diffuseColor __attribute__ ((aligned (16)));
 	float3 specularColor __attribute__ ((aligned (16)));
 	float3 dir __attribute__ ((aligned (16)));
 	float3 fogColor __attribute__ ((aligned (16)));
+#endif
 	float fogEnd;
 	float fogScale;
 	float3 unused;
@@ -462,7 +469,7 @@ void CDecalsDrawerGL4::CreateStructureVBOs()
 	assert(uniformBlockSize > 0);
 
 	if (uniformBlockSize % sizeof(SGLSLGroundLighting) != 0)
-		LOG("uniformBlockSize sizeof(SGLSLGroundLighting) %u %zu", uniformBlockSize, sizeof(SGLSLGroundLighting));
+		LOG("uniformBlockSize sizeof(SGLSLGroundLighting) %u " _STPF_, uniformBlockSize, sizeof(SGLSLGroundLighting));
 	assert(uniformBlockSize % sizeof(SGLSLGroundLighting) == 0);
 
 
@@ -491,7 +498,7 @@ void CDecalsDrawerGL4::CreateStructureVBOs()
 	glGetActiveUniformBlockiv(decalShader->GetObjID(), uniformBlockIndex, GL_UNIFORM_BLOCK_DATA_SIZE, &uniformBlockSize);
 
 	if (uniformBlockSize % sizeof(SGLSLDecal) != 0)
-		LOG("uniformBlockSize sizeof(SGLSLDecal) %u %u", uniformBlockSize, sizeof(SGLSLDecal));
+		LOG("uniformBlockSize sizeof(SGLSLDecal) %u " _STPF_, uniformBlockSize, sizeof(SGLSLDecal));
 	assert(uniformBlockSize % sizeof(SGLSLDecal) == 0);
 
 	maxDecals = uniformBlockSize / sizeof(SGLSLDecal);

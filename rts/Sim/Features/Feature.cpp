@@ -1,6 +1,5 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "System/mmgr.h"
 
 #include "Feature.h"
 #include "FeatureHandler.h"
@@ -31,6 +30,7 @@ CR_BIND_DERIVED(CFeature, CSolidObject, )
 CR_REG_METADATA(CFeature, (
 	CR_MEMBER(defID),
 	CR_MEMBER(isRepairingBeforeResurrect),
+	CR_MEMBER(isAtFinalHeight),
 	CR_MEMBER(isMoving),
 	CR_MEMBER(inUpdateQue),
 	CR_MEMBER(resurrectProgress),
@@ -52,6 +52,7 @@ CR_REG_METADATA(CFeature, (
 CFeature::CFeature() : CSolidObject(),
 	defID(-1),
 	isRepairingBeforeResurrect(false),
+	isAtFinalHeight(false),
 	isMoving(false),
 	inUpdateQue(false),
 	resurrectProgress(0.0f),
@@ -107,7 +108,7 @@ void CFeature::PostLoad()
 		model = def->LoadModel();
 
 		SetMidAndAimPos(model->relMidPos, model->relMidPos, true);
-		SetRadiusAndHeight(model->radius, model->height);
+		SetRadiusAndHeight(model);
 	} else if (def->drawType >= DRAWTYPE_TREE) {
 		SetMidAndAimPos(UpVector * TREE_RADIUS, UpVector * TREE_RADIUS, true);
 		SetRadiusAndHeight(TREE_RADIUS, TREE_RADIUS * 2.0f);
@@ -161,7 +162,7 @@ void CFeature::Initialize(const float3& _pos, const FeatureDef* _def, short int 
 			LOG_L(L_ERROR, "Features: Couldn't load model for %s", def->name.c_str());
 		} else {
 			SetMidAndAimPos(model->relMidPos, model->relMidPos, true);
-			SetRadiusAndHeight(model->radius, model->height);
+			SetRadiusAndHeight(model);
 		}
 	} else {
 		if (def->drawType >= DRAWTYPE_TREE) {
@@ -487,8 +488,6 @@ bool CFeature::UpdatePosition()
 				Move1D(realGroundHeight, 1, false);
 			}
 
-			isMoving = (deathSpeed != ZeroVector);
-
 			if (!pos.IsInBounds()) {
 				pos.ClampInBounds();
 
@@ -522,15 +521,19 @@ bool CFeature::UpdatePosition()
 		}
 
 		transMatrix[13] = pos.y;
-		isMoving = (std::fabs(pos.y - finalHeight) >= 0.01f);
 	}
 
 	isUnderWater = ((pos.y + height) < 0.0f);
+	isMoving = ((deathSpeed != ZeroVector) || (std::fabs(pos.y - finalHeight) >= 0.01f));
+
 	return isMoving;
 }
 
 void CFeature::UpdateFinalHeight(bool useGroundHeight)
 {
+	if (isAtFinalHeight)
+		return;
+
 	if (useGroundHeight) {
 		if (def->floating) {
 			finalHeight = ground->GetHeightAboveWater(pos.x, pos.z);
@@ -538,6 +541,10 @@ void CFeature::UpdateFinalHeight(bool useGroundHeight)
 			finalHeight = ground->GetHeightReal(pos.x, pos.z);
 		}
 	} else {
+		// permanently stay at this height,
+		// even if terrain changes under us
+		// later
+		isAtFinalHeight = true;
 		finalHeight = pos.y;
 	}
 }

@@ -279,7 +279,7 @@ EXTERN inline int gmlSizeOf(int datatype) {
 #define GML_MAKEASS_I() GML_MAKEASS_H() p->I=I;
 #define GML_MAKEASS_J() GML_MAKEASS_I() p->J=J;
 
-#define GML_RETVAL(ft) return (ft)*(volatile ft *)&(p->ret);
+#define GML_RETVAL(ft) return (ft) *reinterpret_cast<volatile ft *>(&(p->ret));
 
 #define GML_RELOC()\
 	while(qd->WritePos+datasize>=qd->WriteSize)\
@@ -289,7 +289,7 @@ EXTERN inline int gmlSizeOf(int datatype) {
 	gmlQueue *qd=&gmlQueues[gmlThreadNumber];\
 	int datasize=sizeof(gml##name##Data);\
 	GML_RELOC()\
-	gml##name##Data *p=(gml##name##Data *)qd->WritePos;\
+	gml##name##Data *p=reinterpret_cast<gml##name##Data *>(qd->WritePos);\
 	p->type=gml##name##Enum;
 
 #define GML_UPD_POS()\
@@ -303,7 +303,7 @@ EXTERN inline int gmlSizeOf(int datatype) {
 	int size=sizefun;\
 	int datasize=sizeof(gml##name##Data)+size;\
 	GML_RELOC()\
-	gml##name##Data *p=(gml##name##Data *)qd->WritePos;\
+	gml##name##Data *p=reinterpret_cast<gml##name##Data *>(qd->WritePos);\
 	p->type=gml##name##Enum;
 
 #define GML_PREP_VAR_SIZE(name,sizefun)\
@@ -1358,6 +1358,7 @@ GML_MAKEFUN4(StencilFuncSeparate,GLenum,GLenum,GLint,GLuint)
 GML_MAKEFUN4(StencilOpSeparate,GLenum,GLenum,GLenum,GLenum)
 GML_MAKEFUN2(BeginQuery,GLenum,GLuint,)
 GML_MAKEFUN1(EndQuery,GLenum)
+GML_MAKEFUN3(GetQueryObjectiv,GLuint,GLenum,GLint *,,GML_SYNC())
 GML_MAKEFUN3(GetQueryObjectuiv,GLuint,GLenum,GLuint *,,GML_SYNC())
 GML_MAKEFUN2(BlendEquationSeparate,GLenum,GLenum,)
 GML_MAKEFUN4(BlendFuncSeparate,GLenum,GLenum,GLenum,GLenum)
@@ -1447,5 +1448,6 @@ GML_MAKEFUN3(GetUniformuiv,GLuint,GLint,GLuint *,,GML_SYNC())
 GML_MAKEFUN7(GetActiveAttrib,GLuint,GLuint,GLsizei,GLsizei *,GLint *,GLenum *,GLchar *,GML_SYNC())
 GML_MAKEFUN2R(GetAttribLocation,GLuint,const GLchar *,GLint)
 GML_MAKEFUN3(BindAttribLocation,GLuint,GLuint,const GLchar *,)
+GML_MAKEFUN3(GetCompressedTexImage,GLenum,GLint,GLvoid *,,GML_SYNC())
 
 #endif // _GML_FUN_H

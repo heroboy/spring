@@ -3092,7 +3092,7 @@ EXPORT(int) skirmishAiCallback_UnitDef_WeaponMount_getOnlyTargetCategory(int ski
 //########### BEGINN Unit
 EXPORT(int) skirmishAiCallback_Unit_getLimit(int skirmishAIId) {
 	const int team = skirmishAIId_teamId[skirmishAIId];
-	const int limit = teamHandler->Team(team)->maxUnits;
+	const int limit = teamHandler->Team(team)->GetMaxUnits();
 	return limit;
 }
 
@@ -4020,10 +4020,6 @@ EXPORT(int) skirmishAiCallback_WeaponDef_getNumBounce(int skirmishAIId, int weap
 
 EXPORT(float) skirmishAiCallback_WeaponDef_getMaxAngle(int skirmishAIId, int weaponDefId) {
 	return getWeaponDefById(skirmishAIId, weaponDefId)->maxAngle;
-}
-
-EXPORT(float) skirmishAiCallback_WeaponDef_getRestTime(int skirmishAIId, int weaponDefId) {
-	return getWeaponDefById(skirmishAIId, weaponDefId)->restTime;
 }
 
 EXPORT(float) skirmishAiCallback_WeaponDef_getUpTime(int skirmishAIId, int weaponDefId) {
@@ -5065,7 +5061,6 @@ static void skirmishAiCallback_init(SSkirmishAICallback* callback) {
 	callback->WeaponDef_getBounceSlip = &skirmishAiCallback_WeaponDef_getBounceSlip;
 	callback->WeaponDef_getNumBounce = &skirmishAiCallback_WeaponDef_getNumBounce;
 	callback->WeaponDef_getMaxAngle = &skirmishAiCallback_WeaponDef_getMaxAngle;
-	callback->WeaponDef_getRestTime = &skirmishAiCallback_WeaponDef_getRestTime;
 	callback->WeaponDef_getUpTime = &skirmishAiCallback_WeaponDef_getUpTime;
 	callback->WeaponDef_getFlightTime = &skirmishAiCallback_WeaponDef_getFlightTime;
 	callback->WeaponDef_getCost = &skirmishAiCallback_WeaponDef_getCost;

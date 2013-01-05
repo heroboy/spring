@@ -61,12 +61,12 @@
 #include "Sim/Weapons/PlasmaRepulser.h"
 #include "Sim/Weapons/Weapon.h"
 #include "Sim/Weapons/WeaponDefHandler.h"
+#include "System/bitops.h"
 #include "System/myMath.h"
 #include "System/FileSystem/FileHandler.h"
 #include "System/FileSystem/VFSHandler.h"
 #include "System/FileSystem/FileSystem.h"
 #include "System/Util.h"
-#include "System/mmgr.h"
 
 #include <set>
 #include <list>
@@ -213,6 +213,8 @@ bool LuaSyncedRead::PushEntries(lua_State* L)
 	REGISTER_LUA_CFUNC(GetUnitVelocity);
 	REGISTER_LUA_CFUNC(GetUnitBuildFacing);
 	REGISTER_LUA_CFUNC(GetUnitIsBuilding);
+	REGISTER_LUA_CFUNC(GetUnitCurrentBuildPower);
+	REGISTER_LUA_CFUNC(GetUnitNanoPieces);
 	REGISTER_LUA_CFUNC(GetUnitTransporter);
 	REGISTER_LUA_CFUNC(GetUnitIsTransporting);
 	REGISTER_LUA_CFUNC(GetUnitShieldState);
@@ -277,6 +279,7 @@ bool LuaSyncedRead::PushEntries(lua_State* L)
 	REGISTER_LUA_CFUNC(GetGroundInfo);
 	REGISTER_LUA_CFUNC(GetGroundBlocked);
 	REGISTER_LUA_CFUNC(GetGroundExtremes);
+	REGISTER_LUA_CFUNC(GetTerrainTypeData);
 
 	REGISTER_LUA_CFUNC(GetSmoothMeshHeight);
 
@@ -2935,6 +2938,63 @@ int LuaSyncedRead::GetUnitIsBuilding(lua_State* L)
 }
 
 
+int LuaSyncedRead::GetUnitCurrentBuildPower(lua_State* L)
+{
+	CUnit* unit = ParseAllyUnit(L, __FUNCTION__, 1);
+	if (unit == NULL) {
+		return 0;
+	}
+	const CBuilder* builder = dynamic_cast<CBuilder*>(unit);
+	if (builder) {
+		lua_pushnumber(L, count_bits_set(builder->curBuildPower) / float(UNIT_SLOWUPDATE_RATE));
+		return 1;
+	}
+	const CFactory* factory = dynamic_cast<CFactory*>(unit);
+	if (factory) {
+		lua_pushnumber(L, count_bits_set(factory->curBuildPower) / float(UNIT_SLOWUPDATE_RATE));
+		return 1;
+	}
+	return 0;
+}
+
+
+int LuaSyncedRead::GetUnitNanoPieces(lua_State* L)
+{
+	const CUnit* unit = ParseAllyUnit(L, __FUNCTION__, 1);
+	if (unit == NULL) {
+		return 0;
+	}
+
+	const std::vector<int>* pieces = NULL;
+	{
+		const CBuilder* builder = dynamic_cast<const CBuilder*>(unit);
+		if (builder) {
+			pieces = &builder->nanoPieces;
+		}
+		const CFactory* factory = dynamic_cast<const CFactory*>(unit);
+		if (factory) {
+			pieces = &factory->nanoPieces;
+		}
+	}
+
+	if (pieces == NULL) {
+		return 0;
+	}
+
+	lua_createtable(L, pieces->size(), 0);
+	for (size_t p = 0; p < pieces->size(); p++) {
+		const int scriptnum = (*pieces)[p];
+		const int piecenum  = unit->script->ScriptToModel(scriptnum) + 1;
+
+		lua_pushnumber(L, p + 1);
+		lua_pushnumber(L, piecenum);
+		lua_rawset(L, -3);
+	}
+
+	return 1;
+}
+
+
 int LuaSyncedRead::GetUnitTransporter(lua_State* L)
 {
 	CUnit* unit = ParseInLosUnit(L, __FUNCTION__, 1);
@@ -4543,6 +4603,28 @@ int LuaSyncedRead::GetGroundExtremes(lua_State* L)
 	return 2;
 }
 
+
+int LuaSyncedRead::GetTerrainTypeData(lua_State* L)
+{
+	const int tti = luaL_checkint(L, 1);
+
+	if (tti < 0 || tti >= CMapInfo::NUM_TERRAIN_TYPES) {
+		return 0;
+	}
+
+	const CMapInfo::TerrainType* tt = &mapInfo->terrainTypes[tti];
+
+	lua_pushsstring(L, tt->name);
+	lua_pushnumber(L, tt->hardness);
+	lua_pushnumber(L, tt->tankSpeed);
+	lua_pushnumber(L, tt->kbotSpeed);
+	lua_pushnumber(L, tt->hoverSpeed);
+	lua_pushnumber(L, tt->shipSpeed);
+	lua_pushboolean(L, tt->receiveTracks);
+
+	return 7;
+}
+
 /******************************************************************************/
 
 int LuaSyncedRead::GetSmoothMeshHeight(lua_State *L)
@@ -4866,9 +4948,9 @@ static int GetUnitPieceInfo(lua_State* L, const ModelType& op)
 
 	HSTR_PUSH(L, "children");
 	lua_newtable(L);
-	for (int c = 0; c < (int)op.childs.size(); c++) {
+	for (int c = 0; c < (int)op.children.size(); c++) {
 		lua_pushnumber(L, c + 1);
-		lua_pushsstring(L, op.childs[c]->name);
+		lua_pushsstring(L, op.children[c]->name);
 		lua_rawset(L, -3);
 	}
 	lua_rawset(L, -3);

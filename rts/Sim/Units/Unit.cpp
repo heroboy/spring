@@ -1,6 +1,5 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "System/mmgr.h"
 #include "lib/gml/gml.h"
 
 #include "UnitDef.h"
@@ -82,6 +81,7 @@
 //////////////////////////////////////////////////////////////////////
 
 //! info: SlowUpdate runs each 16th GameFrame (:= twice per 32GameFrames) (a second has GAME_SPEED=30 gameframes!)
+float CUnit::empDecline     = 2.0f * (float)UNIT_SLOWUPDATE_RATE / (float)GAME_SPEED / 40.0f;
 float CUnit::expMultiplier  = 1.0f;
 float CUnit::expPowerScale  = 1.0f;
 float CUnit::expHealthScale = 0.7f;
@@ -376,7 +376,7 @@ void CUnit::PreInit(const UnitDef* uDef, int uTeam, int facing, const float3& po
 
 	Move3D(position.cClampInMap(), false);
 	SetMidAndAimPos(model->relMidPos, model->relMidPos, true);
-	SetRadiusAndHeight(model->radius, model->height);
+	SetRadiusAndHeight(model);
 	UpdateDirVectors(!upright);
 	UpdateMidAndAimPos();
 
@@ -895,7 +895,7 @@ void CUnit::SlowUpdate()
 		// DoDamage) we potentially start decaying from a lower damage
 		// level and would otherwise be de-paralyzed more quickly than
 		// specified by <paralyzeTime>
-		paralyzeDamage -= ((modInfo.paralyzeOnMaxHealth? maxHealth: health) * 0.5f * modInfo.unitParalysisDeclineScale);
+		paralyzeDamage -= ((modInfo.paralyzeOnMaxHealth? maxHealth: health) * 0.5f * CUnit::empDecline);
 		paralyzeDamage = std::max(paralyzeDamage, 0.0f);
 	}
 
@@ -1218,7 +1218,7 @@ void CUnit::DoDamage(const DamageArray& damages, const float3& impulse, CUnit* a
 		// rate of paralysis-damage reduction is lower if the unit has less than
 		// maximum health to ensure stun-time is always equal to <paralyzeTime>
 		const float baseHealth = (modInfo.paralyzeOnMaxHealth? maxHealth: health);
-		const float paralysisDecayRate = baseHealth * modInfo.unitParalysisDeclineScale;
+		const float paralysisDecayRate = baseHealth * CUnit::empDecline;
 		const float sumParalysisDamage = paralysisDecayRate * paralyzeTime;
 		const float maxParalysisDamage = baseHealth + sumParalysisDamage - paralyzeDamage;
 
@@ -2183,7 +2183,7 @@ void CUnit::PostLoad()
 	localModel = new LocalModel(model);
 	blockMap = (unitDef->GetYardMap().empty())? NULL: &unitDef->GetYardMap()[0];
 
-	SetRadiusAndHeight(model->radius, model->height);
+	SetRadiusAndHeight(model);
 
 	modelParser->CreateLocalModel(localModel);
 	// FIXME: how to handle other script types (e.g. Lua) here?
@@ -2573,6 +2573,16 @@ void CUnit::QueSmokeProjectile(bool delay) {
 	}
 }
 
+void CUnit::QueAddImpulse(CSolidObject *o, float massScale, bool delay) {
+	if (delay) {
+		ASSERT_THREAD_OWNS_UNIT();
+		delayOps.push_back(DelayOp(ADD_UNIT_IMPULSE, massScale, o));
+	} else {
+		CUnit* u = static_cast<CUnit *>(o);
+		u->AddImpulse((u->moveType->oldPos - u->pos) * massScale);
+	}
+}
+
 
 void CUnit::QueUpdateLOS(bool delay) {
 	if (delay) {
@@ -2615,6 +2625,7 @@ void CUnit::QueFindPad(bool delay) {
 		}
 	}
 }
+
 
 int CUnit::ExecuteDelayOps() {
 	int ret = 0;
@@ -2713,6 +2724,9 @@ int CUnit::ExecuteDelayOps() {
 				break;
 			case SMOKE_PROJECTILE:
 				QueSmokeProjectile(false);
+				break;
+			case ADD_UNIT_IMPULSE:
+				QueAddImpulse(const_cast<CSolidObject *>(d.obj), d.mscale, false);
 				break;
 			default:
 				LOG_L(L_ERROR, "Unknown delay operation: %d", d.type);

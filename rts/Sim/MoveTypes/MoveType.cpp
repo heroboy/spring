@@ -2,7 +2,6 @@
 
 #include <cassert>
 
-#include "System/mmgr.h"
 
 #include "MoveType.h"
 #include "Map/Ground.h"
@@ -49,6 +48,7 @@ AMoveType::AMoveType(CUnit* owner):
 	stableIsSkidding(false),
 	stableIsFlying(false),
 	stableGoalPos(owner? owner->pos: ZeroVector),
+	stableProgressState(Done),
 #endif
 	repairBelowHealth(0.3f)
 {
@@ -105,6 +105,7 @@ void AMoveType::StableSlowUpdate() {
 	stableIsSkidding = IsSkidding();
 	stableIsFlying = IsFlying();
 	stableGoalPos = goalPos;
+	stableProgressState = progressState;
 }
 
 void AMoveType::StableUpdate(bool slow) {
@@ -117,10 +118,12 @@ void AMoveType::StableInit(bool stable) {
 		pStableIsSkidding = &AMoveType::IsSkiddingStable;
 		pStableIsFlying = &AMoveType::IsFlyingStable;
 		pStableGoalPos = &stableGoalPos;
+		pStableProgressState = &stableProgressState;
 	} else {
 		pStableIsSkidding = &AMoveType::IsSkidding;
 		pStableIsFlying = &AMoveType::IsFlying;
 		pStableGoalPos = &goalPos;
+		pStableProgressState = &progressState;
 	}
 }
 

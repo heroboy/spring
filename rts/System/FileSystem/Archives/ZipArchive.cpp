@@ -5,9 +5,9 @@
 
 #include <algorithm>
 #include <stdexcept>
+#include <assert.h>
 
 #include "System/Util.h"
-#include "System/mmgr.h"
 #include "System/Log/ILog.h"
 
 
@@ -25,13 +25,7 @@ IArchive* CZipArchiveFactory::DoCreateArchive(const std::string& filePath) const
 CZipArchive::CZipArchive(const std::string& archiveName)
 	: CBufferedArchive(archiveName)
 {
-#ifdef USEWIN32IOAPI
-	zlib_filefunc_def ffunc;
-	fill_win32_filefunc(&ffunc);
-	zip = unzOpen2(archiveName.c_str(),&ffunc);
-#else
 	zip = unzOpen(archiveName.c_str());
-#endif
 	if (!zip) {
 		LOG_L(L_ERROR, "Error opening %s", archiveName.c_str());
 		return;

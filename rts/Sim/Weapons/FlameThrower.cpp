@@ -6,7 +6,6 @@
 #include "Sim/Projectiles/WeaponProjectiles/FlameProjectile.h"
 #include "Sim/Units/Unit.h"
 #include "WeaponDefHandler.h"
-#include "System/mmgr.h"
 
 CR_BIND_DERIVED(CFlameThrower, CWeapon, (NULL));
 
@@ -33,8 +32,11 @@ void CFlameThrower::FireImpl()
 		weaponDef->ownerExpAccWeight) -
 		(dir * 0.001f);
 
-	new CFlameProjectile(weaponMuzzlePos, dir * projectileSpeed,
-		spread, owner, weaponDef, (int) (range / projectileSpeed * weaponDef->duration));
+	ProjectileParams params = GetProjectileParams();
+	params.pos = weaponMuzzlePos;
+	params.speed = dir * projectileSpeed;
+	params.ttl = (int) (range / projectileSpeed * weaponDef->duration);
+	new CFlameProjectile(params, spread);
 }
 
 bool CFlameThrower::TryTarget(const float3 &pos, bool userTarget, CUnit* unit)

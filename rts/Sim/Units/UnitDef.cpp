@@ -139,6 +139,8 @@ UnitDef::UnitDef()
 	, stockpileWeaponDef(NULL)
 	, maxWeaponRange(0.0f)
 	, maxCoverage(0.0f)
+	, deathExpWeaponDef(NULL)
+	, selfdExpWeaponDef(0)
 	, buildPic(NULL)
 	, selfDCountdown(0)
 	, builder(false)
@@ -607,6 +609,8 @@ UnitDef::UnitDef(const LuaTable& udTable, const std::string& unitName, int id)
 	selfdExpWeaponDef = weaponDefHandler->GetWeapon(udTable.GetString("selfDestructAs", ""));
 	if (deathExpWeaponDef == NULL) { deathExpWeaponDef = weaponDefHandler->GetWeapon("NOWEAPON"); }
 	if (selfdExpWeaponDef == NULL) { selfdExpWeaponDef = weaponDefHandler->GetWeapon("NOWEAPON"); }
+	assert(deathExpWeaponDef);
+	assert(selfdExpWeaponDef);
 
 	power = udTable.GetFloat("power", (metal + (energy / 60.0f)));
 

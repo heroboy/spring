@@ -37,22 +37,6 @@ IPathManager::IPathManager() : pathRequestID(0), wait(false), stopThread(false) 
 }
 
 
-IPathManager::~IPathManager() {
-	if (pathBatchThread != NULL) {
-		{
-			boost::mutex::scoped_lock preqLock(preqMutex);
-			stopThread = true;
-			if (wait) {
-				wait = false;
-				cond.notify_one();
-			}
-		}
-		pathBatchThread->join();
-		pathBatchThread = NULL;
-	}
-}
-
-
 int IPathManager::GetPathID(int cid) {
 	std::map<int, unsigned int>::iterator it = newPathCache.find(cid);
 	if (it != newPathCache.end())

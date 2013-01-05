@@ -2,7 +2,6 @@
 
 #include "3DModel.h"
 
-#include "System/mmgr.h"
 
 #include "3DOParser.h"
 #include "S3OParser.h"
@@ -34,8 +33,9 @@ S3DModelPiece* S3DModel::FindPiece(const std::string& name) const
 
 void S3DModelPiece::DrawStatic() const
 {
-	const bool needTrafo = (offset.SqLength() != 0.f);
-	if (needTrafo) {
+	const bool transform = (offset.SqLength() != 0.0f);
+
+	if (transform) {
 		glPushMatrix();
 		glTranslatef(offset.x, offset.y, offset.z);
 	}
@@ -43,11 +43,11 @@ void S3DModelPiece::DrawStatic() const
 		if (!isEmpty)
 			glCallList(dispListID);
 
-		for (std::vector<S3DModelPiece*>::const_iterator ci = childs.begin(); ci != childs.end(); ++ci) {
+		for (std::vector<S3DModelPiece*>::const_iterator ci = children.begin(); ci != children.end(); ++ci) {
 			(*ci)->DrawStatic();
 		}
 
-	if (needTrafo) {
+	if (transform) {
 		glPopMatrix();
 	}
 }
@@ -101,6 +101,11 @@ LocalModelPiece* LocalModel::CreateLocalModelPieces(const S3DModelPiece* mpParen
 
 	pieces.push_back(lmpParent);
 
+	// the mapping is 1:1 for Lua scripts, but not necessarily for COB
+	// CobInstance::MapScriptToModelPieces does the remapping (if any)
+	lmpParent->SetLModelPieceIndex(pieceNum);
+	lmpParent->SetScriptPieceIndex(pieceNum);
+
 	for (unsigned int i = 0; i < mpParent->GetChildCount(); i++) {
 		lmpChild = CreateLocalModelPieces(mpParent->GetChild(i), ++pieceNum);
 		lmpChild->SetParent(lmpParent);
@@ -125,6 +130,9 @@ LocalModelPiece::LocalModelPiece(const S3DModelPiece* piece)
 	, scriptSetVisible(!piece->isEmpty)
 	, identityTransform(true)
 
+	, lmodelPieceIndex(-1)
+	, scriptPieceIndex(-1)
+
 	, original(piece)
 	, parent(NULL) // set later
 {
@@ -133,7 +141,7 @@ LocalModelPiece::LocalModelPiece(const S3DModelPiece* piece)
 	dispListID =  piece->dispListID;
 	pos        =  piece->offset;
 
-	childs.reserve(piece->childs.size());
+	children.reserve(piece->children.size());
 
 	if (piece->GetVertexCount() < 2) {
 		dir = float3(1.0f, 1.0f, 1.0f);
@@ -181,8 +189,8 @@ void LocalModelPiece::UpdateMatricesRec(bool updateChildMatrices)
 		}
 	}
 
-	for (unsigned int i = 0; i < childs.size(); i++) {
-		childs[i]->UpdateMatricesRec(updateChildMatrices);
+	for (unsigned int i = 0; i < children.size(); i++) {
+		children[i]->UpdateMatricesRec(updateChildMatrices);
 	}
 }
 
@@ -221,8 +229,8 @@ void LocalModelPiece::SetLODCount(unsigned int count)
 		lodDispLists[i] = 0;
 	}
 
-	for (unsigned int i = 0; i < childs.size(); i++) {
-		childs[i]->SetLODCount(count);
+	for (unsigned int i = 0; i < children.size(); i++) {
+		children[i]->SetLODCount(count);
 	}
 }
 

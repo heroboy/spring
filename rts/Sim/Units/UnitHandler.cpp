@@ -1,7 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
 #include <cassert>
-#include "System/mmgr.h"
 
 #include "lib/gml/gmlmut.h"
 #include "lib/gml/gml_base.h"
@@ -74,11 +73,15 @@ CUnitHandler::CUnitHandler()
 	atomicCount(-1),
 	simBarrier(NULL)
 {
-	// note: the number of active teams can change at run-time, so
-	// the team unit limit should be recalculated whenever one dies
-	// or spawns (but that would get complicated)
+	// set the global (runtime-constant) unit-limit as the sum
+	// of  all team unit-limits, which is *always* <= MAX_UNITS
+	// (note that this also counts the Gaia team)
+	//
+	// teams can not be created at runtime, but they can die and
+	// in that case the per-team limit is recalculated for every
+	// other team in the respective allyteam
 	for (unsigned int n = 0; n < teamHandler->ActiveTeams(); n++) {
-		maxUnits += teamHandler->Team(n)->maxUnits;
+		maxUnits += teamHandler->Team(n)->GetMaxUnits();
 	}
 
 	int numThreads = std::max(0, configHandler->GetInt("SimThreadCount"));

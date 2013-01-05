@@ -8,7 +8,7 @@
 #include "Sim/MoveTypes/MoveDefHandler.h"
 #include "Sim/Objects/SolidObject.h"
 #include "Sim/Units/Unit.h"
-#include "System/mmgr.h"
+#include "Sim/Units/CommandAI/CommandAI.h"
 
 bool CMoveMath::noHoverWaterMove = false;
 float CMoveMath::waterDamageCost = 0.0f;
@@ -119,12 +119,11 @@ CMoveMath::BlockType CMoveMath::IsBlockedNoSpeedModCheck(const MoveDef& moveDef,
 	const int zmin = zSquare - moveDef.zsizeh, zmax = zSquare + moveDef.zsizeh;
 	const int xstep = 2, zstep = 2;
 	// (footprints are point-symmetric around <xSquare, zSquare>)
-	for (int x = xmin; x <= xmax; x += xstep) {
-		for (int z = zmin; z <= zmax; z += zstep) {
+	for (int z = zmin; z <= zmax; z += zstep) {
+		for (int x = xmin; x <= xmax; x += xstep) {
 			ret |= SquareIsBlocked(moveDef, x, z, collider);
 		}
 	}
-
 	return ret;
 }
 
@@ -135,8 +134,8 @@ bool CMoveMath::IsBlockedStructure(const MoveDef& moveDef, int xSquare, int zSqu
 	const int zmin = zSquare - moveDef.zsizeh, zmax = zSquare + moveDef.zsizeh;
 	const int xstep = 2, zstep = 2;
 	// (footprints are point-symmetric around <xSquare, zSquare>)
-	for (int x = xmin; x <= xmax; x += xstep) {
-		for (int z = zmin; z <= zmax; z += zstep) {
+	for (int z = zmin; z <= zmax; z += zstep) {
+		for (int x = xmin; x <= xmax; x += xstep) {
 			if (SquareIsBlocked(moveDef, x, z, collider) & BLOCK_STRUCTURE)
 				return true;
 		}
@@ -292,7 +291,7 @@ CMoveMath::BlockType CMoveMath::SquareIsBlocked(const MoveDef& moveDef, int xSqu
 	const BlockingMapCell& c = groundBlockingObjectMap->GetCell(xSquare + zSquare * gs->mapx);
 
 	for (BlockingMapCellIt it = c.begin(); it != c.end(); ++it) {
-		CSolidObject* obstacle = it->second;
+		const CSolidObject* obstacle = it->second;
 
 		if (IsNonBlocking(moveDef, obstacle, collider)) {
 			continue;
@@ -303,7 +302,7 @@ CMoveMath::BlockType CMoveMath::SquareIsBlocked(const MoveDef& moveDef, int xSqu
 			if (obstacle->StableIsMoving()) {
 				r |= BLOCK_MOVING;
 			} else {
-				CUnit& u = *static_cast<CUnit*>(obstacle);
+				const CUnit& u = *static_cast<const CUnit*>(obstacle);
 				if (!u.StableBeingBuilt() && u.StableCommandQueEmpty()) {
 					// idling mobile unit
 					r |= BLOCK_MOBILE;

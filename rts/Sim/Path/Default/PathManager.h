@@ -25,6 +25,7 @@ public:
 	boost::uint32_t GetPathCheckSum() const;
 
 	void Update(ST_FUNC int unused = 0);
+	void UpdateFull();
 	void UpdatePath(ST_FUNC const CSolidObject*, unsigned int);
 
 	void DeletePath(ST_FUNC unsigned int pathID);
@@ -86,6 +87,8 @@ public:
 
 	void SetHeatOnSquare(int x, int y, int value, const CSolidObject* owner);
 	const int GetHeatOnSquare(int x, int y);
+
+	void GetOutstandingUpdates(int* med, int* low);
 
 private:
 	unsigned int RequestPath(

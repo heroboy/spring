@@ -1,6 +1,5 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "System/mmgr.h"
 #include "System/creg/STL_Map.h"
 #include "WeaponDefHandler.h"
 #include "Weapon.h"
@@ -151,7 +150,7 @@ CWeapon::CWeapon(CUnit* owner):
 	badTargetCategory(0),
 	onlyTargetCategory(0xffffffff),
 
-	interceptTarget(0),
+	interceptTarget(NULL),
 	stockpileTime(1),
 	buildPercent(0),
 	numStockpiled(0),
@@ -383,6 +382,7 @@ void CWeapon::Update()
 		 || fpsPlayer->fpsController.mouse2);
 	canFire = canFire && ((owner->unitDef->maxFuel == 0) || (owner->currentFuel > 0) || (fuelUsage == 0));
 	canFire = canFire && !isBeingServicedOnPad(owner);
+	canFire = canFire && (wantedDir.dot(lastRequestedDir) > 0.94); // ~20 degree sanity check to force new aim
 
 	if (canFire) {
 		if ((weaponDef->stockpile ||
@@ -899,7 +899,7 @@ void CWeapon::DependentDied(CObject* o)
 
 	// NOTE: DependentDied is called from ~CObject-->Detach, object is just barely valid
 	if (weaponDef->interceptor || weaponDef->isShield) {
-		incomingProjectiles.erase(((CWeaponProjectile*) o)->id);
+		incomingProjectiles.erase(static_cast<CWeaponProjectile*>(o)->id);
 	}
 
 	if (o == interceptTarget) {
@@ -1236,9 +1236,25 @@ void CWeapon::UpdateInterceptTarget()
 		// keep targetPos in sync with the incoming projectile's position
 		interceptTarget = p;
 		targetType = Target_Intercept;
-		targetPos = p->pos;
+		targetPos = p->pos + p->speed;
 	}
 }
+
+
+ProjectileParams CWeapon::GetProjectileParams()
+{
+	ProjectileParams params;
+	params.target = targetUnit;
+	params.weaponDef = weaponDef;
+	params.owner = owner;
+	params.weapon = this;
+	if (interceptTarget) {
+		params.target = interceptTarget;
+	}
+
+	return params;
+}
+
 
 float CWeapon::GetRange2D(float yDiff) const
 {

@@ -1,9 +1,7 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "System/mmgr.h"
 
 #include "ModInfo.h"
-#include "GlobalConstants.h"
 
 #include "Game/GameSetup.h"
 #include "Lua/LuaConfig.h"
@@ -102,11 +100,6 @@ void CModInfo::Init(const char* modArchive)
 	{
 		// paralyze
 		const LuaTable& paralyzeTbl = root.SubTable("paralyze");
-		// simulation executes 2 CUnit SlowUpdate's per 32 frames and
-		// paralysis damage is decayed each SlowUpdate, so by default
-		// it takes 40 seconds to drop from 100% to 0% paralysis
-		unitParalysisDeclineScale = paralyzeTbl.GetFloat("unitParalysisDeclineScale", 40.0f);
-		unitParalysisDeclineScale = ((2.0f * UNIT_SLOWUPDATE_RATE) / GAME_SPEED) / unitParalysisDeclineScale;
 		paralyzeOnMaxHealth = paralyzeTbl.GetBool("paralyzeOnMaxHealth", true);
 	}
 

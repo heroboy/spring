@@ -47,30 +47,6 @@ public:
 	virtual bool IsFlying() const { return false; }
 	virtual bool IsReversing() const { return false; }
 
-#if STABLE_UPDATE
-	bool stableIsSkidding, (AMoveType::*pStableIsSkidding)() const;
-	bool stableIsFlying, (AMoveType::*pStableIsFlying)() const;
-	float3 stableGoalPos, *pStableGoalPos;
-	// shall return "stable" values, that do not suddenly change during a sim frame. (for multithreading purposes)
-	bool StableIsSkidding() const { return (this->*pStableIsSkidding)(); }
-	bool StableIsFlying() const { return (this->*pStableIsFlying)(); }
-	const float3& StableGoalPos() const { return *pStableGoalPos; }
-
-	bool IsSkiddingStable() const;
-	bool IsFlyingStable() const;
-
-	void StableInit(bool stable);
-	/*virtual*/ void StableUpdate(bool slow);
-	void StableSlowUpdate();
-#else
-	bool StableIsSkidding() const { return IsSkidding(); }
-	bool StableIsFlying() const { return IsFlying(); }
-	const float3& StableGoalPos() const { return goalPos; }
-
-	void StableInit(bool stable) {}
-	/*virtual*/ void StableUpdate(bool slow) {}
-#endif
-
 	virtual void ReservePad(CAirBaseHandler::LandingPad* lp) { /* AAirMoveType only */ }
 	virtual void UnreservePad(CAirBaseHandler::LandingPad* lp) { /* AAirMoveType only */ }
 	virtual CAirBaseHandler::LandingPad* GetReservedPad() { return NULL; }
@@ -101,6 +77,32 @@ public:
 		Failed = 2
 	};
 	ProgressState progressState;
+
+#if STABLE_UPDATE
+	bool stableIsSkidding, (AMoveType::*pStableIsSkidding)() const;
+	bool stableIsFlying, (AMoveType::*pStableIsFlying)() const;
+	float3 stableGoalPos, *pStableGoalPos;
+	ProgressState stableProgressState, *pStableProgressState;
+	// shall return "stable" values, that do not suddenly change during a sim frame. (for multithreading purposes)
+	bool StableIsSkidding() const { return (this->*pStableIsSkidding)(); }
+	bool StableIsFlying() const { return (this->*pStableIsFlying)(); }
+	const float3& StableGoalPos() const { return *pStableGoalPos; }
+	ProgressState StableProgressState() const { return *pStableProgressState; }
+
+	bool IsSkiddingStable() const;
+	bool IsFlyingStable() const;
+
+	void StableInit(bool stable);
+	/*virtual*/ void StableUpdate(bool slow);
+	void StableSlowUpdate();
+#else
+	bool StableIsSkidding() const { return IsSkidding(); }
+	bool StableIsFlying() const { return IsFlying(); }
+	const float3& StableGoalPos() const { return goalPos; }
+
+	void StableInit(bool stable) {}
+	/*virtual*/ void StableUpdate(bool slow) {}
+#endif
 
 protected:
 	float maxSpeed;            // current maximum speed owner is allowed to reach (changes with eg. guard orders)

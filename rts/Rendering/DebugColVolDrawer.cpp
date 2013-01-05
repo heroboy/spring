@@ -1,6 +1,5 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "System/mmgr.h"
 #include "DebugColVolDrawer.h"
 
 #include "Game/Camera.h"
@@ -151,8 +150,8 @@ static void DrawUnitDebugPieceTree(const LocalModelPiece* p, const LocalModelPie
 		}
 	glPopMatrix();
 
-	for (unsigned int i = 0; i < p->childs.size(); i++) {
-		DrawUnitDebugPieceTree(p->childs[i], lap, lapf, mat);
+	for (unsigned int i = 0; i < p->children.size(); i++) {
+		DrawUnitDebugPieceTree(p->children[i], lap, lapf, mat);
 	}
 }
 

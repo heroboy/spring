@@ -13,10 +13,7 @@
 #include "Sim/Objects/SolidObject.h"
 #include "System/float3.h"
 
-#include <boost/thread/thread.hpp>
 #include <boost/detail/atomic_count.hpp>
-#include <boost/thread/mutex.hpp>
-#include <boost/thread/barrier.hpp>
 #include <boost/cstdint.hpp>
 
 struct MoveDef;
@@ -24,6 +21,11 @@ class CPathFinder;
 class CPathEstimatorDef;
 class CPathFinderDef;
 class CPathCache;
+
+namespace boost {
+	class thread;
+	class barrier;
+}
 
 class CPathEstimator {
 public:
@@ -44,10 +46,8 @@ public:
 	CPathEstimator(CPathFinder* pathFinder, unsigned int BLOCK_SIZE, const std::string& cacheFileName, const std::string& map);
 	~CPathEstimator();
 
-#if !defined(USE_MMGR)
 	void* operator new(size_t size);
 	void operator delete(void* p, size_t size);
-#endif
 
 
 
@@ -101,6 +101,7 @@ public:
 	 * called every frame
 	 */
 	void Update();
+	void UpdateFull();
 
 	/**
 	 * Returns a checksum that can be used to check if every player has the same
@@ -124,19 +125,7 @@ private:
 	void CalculateBlockOffsets(int, int);
 	void EstimatePathCosts(int, int);
 
-	const unsigned int BLOCK_SIZE;
-	const unsigned int BLOCK_PIXEL_SIZE;
-	const unsigned int BLOCKS_TO_UPDATE;
-
-
-
-	struct SingleBlock {
-		int2 block;
-		const MoveDef* moveDef;
-	};
-
-
-	void FindOffset(const MoveDef&, int, int);
+	int2 FindOffset(const MoveDef&, int, int) const;
 	void CalculateVertices(const MoveDef&, int, int, int thread = 0);
 	void CalculateVertex(const MoveDef&, int, int, unsigned int, int thread = 0);
 
@@ -150,6 +139,11 @@ private:
 	void WriteFile(const std::string& cacheFileName, const std::string& map);
 	unsigned int Hash() const;
 
+private:
+	const unsigned int BLOCK_SIZE;
+	const unsigned int BLOCK_PIXEL_SIZE;
+	const unsigned int BLOCKS_TO_UPDATE;
+
 	/// Number of blocks on the X axis of the map.
 	int nbrOfBlocksX;
 	/// Number of blocks on the Z axis of the map.
@@ -160,10 +154,17 @@ private:
 	/// The priority-queue used to select next block to be searched.
 	PathPriorityQueue openBlocks;
 
+	friend class CPathManager;
 	std::vector<float> vertices;
+
 	/// List of blocks changed in last search.
 	std::list<int> dirtyBlocks;
+
 	/// Blocks that may need an update due to map changes.
+	struct SingleBlock {
+		int2 block;
+		const MoveDef* moveDef;
+	};
 	std::list<SingleBlock> needUpdate;
 
 	static const int PATH_DIRECTIONS = 8;
@@ -171,7 +172,6 @@ private:
 	int2 directionVector[PATH_DIRECTIONS];
 	int directionVertex[PATH_DIRECTIONS];
 
-	float3 start;
 	int2 startBlock;
 	int2 goalBlock;
 	int startBlocknr;
@@ -180,7 +180,6 @@ private:
 
 	unsigned int maxBlocksToBeSearched;
 	unsigned int testedBlocks;
-	float maxNodeCost;
 
 	std::vector<CPathFinder*> pathFinders;
 	std::vector<boost::thread*> threads;
@@ -191,7 +190,6 @@ private:
 	/// currently crc from the zip
 	boost::uint32_t pathChecksum;
 
-	boost::mutex loadMsgMutex;
 	boost::barrier* pathBarrier;
 	boost::detail::atomic_count offsetBlockNum;
 	boost::detail::atomic_count costBlockNum;

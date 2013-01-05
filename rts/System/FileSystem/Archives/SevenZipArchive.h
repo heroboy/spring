@@ -3,15 +3,16 @@
 #ifndef _7ZIP_ARCHIVE_H
 #define _7ZIP_ARCHIVE_H
 
-#include <boost/thread/mutex.hpp>
 extern "C" {
 #include "lib/7z/7zFile.h"
-#include "lib/7z/Archive/7z/7zIn.h"
+#include "lib/7z/7z.h"
 };
 
 #include "ArchiveFactory.h"
+#include "BufferedArchive.h"
+#include <vector>
+#include <string>
 #include "IArchive.h"
-
 
 /**
  * Creates LZMA/7zip compressed, single-file archives.
@@ -28,7 +29,7 @@ private:
 /**
  * An LZMA/7zip compressed, single-file archive.
  */
-class CSevenZipArchive : public IArchive
+class CSevenZipArchive : public CBufferedArchive
 {
 public:
 	CSevenZipArchive(const std::string& name);
@@ -37,13 +38,12 @@ public:
 	virtual bool IsOpen();
 	
 	virtual unsigned int NumFiles() const;
-	virtual bool GetFile(unsigned int fid, std::vector<boost::uint8_t>& buffer);
+	virtual bool GetFileImpl(unsigned int fid, std::vector<boost::uint8_t>& buffer);
 	virtual void FileInfo(unsigned int fid, std::string& name, int& size) const;
 	virtual bool HasLowReadingCost(unsigned int fid) const;
 	virtual unsigned GetCrc32(unsigned int fid);
 
 private:
-	boost::mutex archiveLock;
 	UInt32 blockIndex;
 	Byte* outBuffer;
 	size_t outBufferSize;
@@ -93,7 +93,12 @@ private:
 		 */
 		int packedSize;
 	};
+	int GetFileName(const CSzArEx* db, int i);
+	const char* GetErrorStr(int res);
+
 	std::vector<FileData> fileData;
+	UInt16 *tempBuf;
+	size_t tempBufSize;
 
 	CFileInStream archiveStream;
 	CSzArEx db;

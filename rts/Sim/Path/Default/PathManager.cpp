@@ -1,6 +1,5 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "System/mmgr.h"
 
 #include "PathManager.h"
 #include "PathConstants.h"
@@ -406,6 +405,14 @@ void CPathManager::Update(ST_FUNC int unused)
 	lowResPE->Update();
 }
 
+
+void CPathManager::UpdateFull()
+{
+	medResPE->UpdateFull();
+	lowResPE->UpdateFull();
+}
+
+
 // used to deposit heat on the heat-map as a unit moves along its path
 void CPathManager::UpdatePath(ST_FUNC const CSolidObject* owner, unsigned int pathID)
 {
@@ -568,4 +575,10 @@ const float* CPathManager::GetNodeExtraCosts(ST_FUNC bool synced) const {
 	const PathNodeStateBuffer& buf = maxResPF->GetNodeStateBuffer();
 	const float* costs = buf.GetNodeExtraCosts(synced);
 	return costs;
+}
+
+void CPathManager::GetOutstandingUpdates(int* med, int* low)
+{
+	*med = medResPE->needUpdate.size();
+	*low = lowResPE->needUpdate.size();
 }

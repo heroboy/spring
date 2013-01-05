@@ -50,7 +50,6 @@
 #include "Sim/Weapons/Weapon.h"
 #include "ExternalAI/SkirmishAIHandler.h"
 #include "ExternalAI/EngineOutHandler.h"
-#include "System/mmgr.h"
 #include "System/EventHandler.h"
 #include "System/Log/ILog.h"
 #include "System/NetProtocol.h"
@@ -1443,7 +1442,7 @@ bool CAICallback::GetValue(int id, void *data)
 			}
 		}
 		case AIVAL_UNIT_LIMIT: {
-			*(int*) data = teamHandler->Team(team)->maxUnits;
+			*(int*) data = teamHandler->Team(team)->GetMaxUnits();
 			return true;
 		}
 		case AIVAL_SCRIPT: {

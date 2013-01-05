@@ -18,7 +18,7 @@ fi
 
 #install
 cd ${BUILDDIR}
-make install-spring-headless demotool install-pr-downloader DESTDIR=${TESTDIR}
+make install-spring-headless install-pr-downloader demotool unitsyncTest lua2php DESTDIR=${TESTDIR}
 
 # HACK/FIXME force spring to detect install dir as read-only
 chmod 555 ${TESTDIR}/usr/local/share/games/spring
@@ -35,18 +35,16 @@ function makescript {
 	${SOURCEDIR}/test/validation/prepare.sh "$GAME" "$MAP" "$AI" "$AIVERSION" > "$OUTPUT"
 }
 
+mkdir -p $DOWNLOADDIR
+
 PRDL="${TESTDIR}/usr/local/bin/pr-downloader --filesystem-writepath=$DOWNLOADDIR"
 # get the name of the latest versions
-GAME1=$($PRDL --rapid-search ba:latest |egrep -o 'Filename: (.*) Size:'|sed 's/Filename: \(.*\) Size:/\1/')
-GAME2=$($PRDL --rapid-search zk:stable |egrep -o 'Filename: (.*) Size:'|sed 's/Filename: \(.*\) Size:/\1/')
-GAME3=$($PRDL --rapid-search bar:test |egrep -o 'Filename: (.*) Size:'|sed 's/Filename: \(.*\) Size:/\1/')
+GAME1=$($PRDL ba:latest |egrep -o '\[Download\] (.*)' |cut -b 12-)
+GAME2=$($PRDL zk:stable |egrep -o '\[Download\] (.*)' |cut -b 12-)
+#GAME3=$($PRDL bar:test |egrep -o '\[Download\] (.*)' |cut -b 12-)
 MAP="Altair_Crossing-V1"
 
-
-$PRDL --download-game "$GAME1"
-$PRDL --download-game "$GAME2"
-$PRDL --download-game "$GAME3"
-$PRDL --download-map "$MAP"
+$PRDL "$MAP"
 
 #install required files into spring dir
 cd ${SOURCEDIR}
@@ -76,6 +74,5 @@ makescript "$GAME1" "$MAP" KAIK 0.13
 makescript "$GAME1" "$MAP" RAI 0.601
 makescript "$GAME1" "$MAP" Shard dev
 makescript "$GAME2" "$MAP" CAI ""
-makescript "$GAME3" "$MAP" KAIK 0.13
 ${SOURCEDIR}/test/validation/prepare-client.sh ValidationClient 127.0.0.1 8452 >${CONTENT_DIR}/connect.txt
 

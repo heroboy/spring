@@ -1,6 +1,5 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "System/mmgr.h"
 
 #include "MobileCAI.h"
 #include "TransportCAI.h"
@@ -75,7 +74,7 @@ CMobileCAI::CMobileCAI():
 	goalPos(-1,-1,-1),
 	goalRadius(0.0f),
 	lastBuggerGoalPos(-1,0,-1),
-	lastUserGoal(0,0,0),
+	lastUserGoal(ZeroVector),
 	lastIdleCheck(0),
 	tempOrder(false),
 	lastPC(-1),
@@ -740,7 +739,7 @@ void CMobileCAI::ExecuteAttack(Command &c)
 
 		// FIXME? targetMidPosMaxDist is 3D, but compared with a 2D value
 		const float targetMidPosDist2D = targetMidPosVec.Length2D();
-		const float targetMidPosMaxDist = owner->maxRange - (orderTarget->speed.SqLength() / owner->unitDef->maxAcc);
+		//const float targetMidPosMaxDist = owner->maxRange - (orderTarget->speed.SqLength() / owner->unitDef->maxAcc);
 
 		if (!owner->weapons.empty()) {
 			if (!(c.options & ALT_KEY) && SkipParalyzeTarget(orderTarget)) {
@@ -1104,13 +1103,10 @@ bool CMobileCAI::MobileAutoGenerateTarget()
 		NonMoving(); return false;
 	}
 
-	// NOTE:
-	//   do not flag as internal order, otherwise we would keep
-	//   generating new orders if we cannot get to lastUserGoal (?)
-	Command c(CMD_MOVE, 0, lastUserGoal);
-	commandQue.push_front(c);
-	unimportantMove = true;
+	// move back to where the user last actively wanted us
+	SetGoal(lastUserGoal, owner->pos);
 
+	unimportantMove = true;
 	return false;
 }
 

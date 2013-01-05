@@ -1,7 +1,6 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
 #include <algorithm>
-#include "System/mmgr.h"
 
 #include "Projectile.h"
 #include "ProjectileHandler.h"
@@ -407,7 +406,9 @@ void CProjectileHandler::CheckUnitCollisions(
 		}
 
 		if (CCollisionHandler::DetectHit(unit, ppos0, ppos1, &cq)) {
-			p->QueCollision(unit, cq.lmp, (cq.b0) ? cq.p0 : cq.p1);
+			// when the testpos is in the colvol DetectHit() sometimes
+			// returns the colvols center as colpos, so use ppos0 in that case
+			p->QueCollision(unit, cq.lmp, (cq.b0 && cq.b1 && (cq.p0 == unit->midPos)) ? ppos0 : cq.p0, ppos0);
 			break;
 		}
 	}
@@ -435,7 +436,9 @@ void CProjectileHandler::CheckFeatureCollisions(
 		}
 
 		if (CCollisionHandler::DetectHit(feature, ppos0, ppos1, &cq)) {
-			p->QueCollision(feature, (cq.b0) ? cq.p0 : cq.p1);
+			// when the testpos is in the colvol DetectHit() sometimes
+			// returns the colvols center as colpos, so use ppos0 in that case
+			p->QueCollision(feature, (cq.b0 && cq.b1 && (cq.p0 == feature->midPos)) ? ppos0 : cq.p0, ppos0);
 			break;
 		}
 	}

@@ -1,6 +1,5 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "System/mmgr.h"
 
 #include "GroundMoveType.h"
 #include "ExternalAI/EngineOutHandler.h"
@@ -24,6 +23,7 @@
 #include "Sim/Path/IPathManager.h"
 #include "Sim/Units/Scripts/CobInstance.h"
 #include "Sim/Units/CommandAI/CommandAI.h"
+#include "Sim/Units/CommandAI/TransportCAI.h"
 #include "Sim/Units/UnitDef.h"
 #include "Sim/Units/UnitHandler.h"
 #include "Sim/Weapons/WeaponDefHandler.h"
@@ -37,8 +37,8 @@
 #include "System/Sync/SyncTracer.h"
 
 #if 1
-#include "Rendering/GlobalRendering.h"
-#define DEBUG_DRAWING_ENABLED globalRendering->drawdebug && !Threading::multiThreadedSim
+#include "Rendering/IPathDrawer.h"
+#define DEBUG_DRAWING_ENABLED pathDrawer->IsEnabled() && !Threading::multiThreadedSim
 #else
 #define DEBUG_DRAWING_ENABLED false
 #endif
@@ -63,8 +63,8 @@ LOG_REGISTER_SECTION_GLOBAL(LOG_SECTION_GMT)
 #define IGNORE_OBSTACLES 0
 #define PLAY_SOUNDS 1
 
-#define OWNER_CMD_QUE owner->commandAI->commandQue
-#define OWNER_MOVE_CMD() (OWNER_CMD_QUE.empty() || OWNER_CMD_QUE[0].GetID() == CMD_MOVE)
+#define UNIT_CMD_QUE_SIZE(u) (u->commandAI->commandQue.size())
+#define UNIT_HAS_MOVE_CMD(u) (u->commandAI->commandQue.empty() || u->commandAI->commandQue[0].GetID() == CMD_MOVE)
 
 #define FOOTPRINT_RADIUS(xs, zs, s) ((math::sqrt((xs * xs + zs * zs)) * 0.5f * SQUARE_SIZE) * s)
 #define POS_IMPASSABLE(md, pos, u)                                               \
@@ -466,7 +466,7 @@ bool CGroundMoveType::FollowPath()
 			//     and we cannot increase tolerance safely (otherwise the unit might stop when still
 			//     outside its range and fail to start construction)
 			const float curGoalDistSq = (owner->pos - goalPos).SqLength2D();
-			const float minGoalDistSq = (OWNER_MOVE_CMD())?
+			const float minGoalDistSq = (UNIT_HAS_MOVE_CMD(owner))?
 				Square(goalRadius * (numIdlingSlowUpdates + 1)):
 				Square(goalRadius                             );
 
@@ -553,7 +553,7 @@ void CGroundMoveType::ChangeSpeed(float newWantedSpeed, bool wantReverse, bool f
 			const short turnDeltaHeading = owner->heading - GetHeadingFromVector(waypointDif.x, waypointDif.z);
 
 			// NOTE: <= 2 because every CMD_MOVE has a trailing CMD_SET_WANTED_MAX_SPEED
-			const bool startBraking = (OWNER_CMD_QUE.size() <= 2 && curGoalDistSq <= minGoalDistSq);
+			const bool startBraking = (UNIT_CMD_QUE_SIZE(owner) <= 2 && curGoalDistSq <= minGoalDistSq);
 
 			if (!fpsMode && turnDeltaHeading != 0) {
 				// only auto-adjust speed for turns when not in FPS mode
@@ -1075,7 +1075,7 @@ float3 CGroundMoveType::GetObstacleAvoidanceDir(const float3& desiredDir) {
 
 		// do not bother steering around idling MOBILE objects
 		// (since collision handling will just push them aside)
-		// TODO: also check if !avoiderUD->pushResistant
+		// TODO: also check if !avoideeUD->pushResistant
 		if (avoideeMobile && (!avoidMobiles || (!avoidee->StableIsMoving() && avoidee->StableAllyTeam() == avoider->allyteam)))
 			continue;
 		// ignore objects that are more than this many degrees off-center from us
@@ -1263,7 +1263,7 @@ bool CGroundMoveType::CanGetNextWayPoint() {
 
 		{
 			const float curGoalDistSq = (currWayPoint - goalPos).SqLength2D();
-			const float minGoalDistSq = (OWNER_MOVE_CMD())?
+			const float minGoalDistSq = (UNIT_HAS_MOVE_CMD(owner))?
 				Square(goalRadius * (numIdlingSlowUpdates + 1)):
 				Square(goalRadius                             );
 
@@ -1397,6 +1397,10 @@ void CGroundMoveType::Arrived()
 		owner->QueCAIGiveCommand(CMD_WAIT);
 		owner->QueCAIGiveCommand(CMD_WAIT);
 
+		if (UNIT_CMD_QUE_SIZE(owner) <= 2 && UNIT_HAS_MOVE_CMD(owner)) {
+			owner->commandAI->GiveCommand(Command(CMD_STOP));
+		}
+
 		LOG_L(L_DEBUG, "Arrived: unit %i arrived", owner->id);
 	}
 }
@@ -1528,7 +1532,7 @@ void CGroundMoveType::HandleStaticObjectCollision(
 	//   called later and 0 will immobilize us
 	//
 	if (canRequestPath && wantRequestPath) {
-		if (OWNER_MOVE_CMD()) {
+		if (UNIT_HAS_MOVE_CMD(owner)) {
 			StartMoving(goalPos, goalRadius, 0.0f);
 		} else {
 			StartMoving(goalPos, goalRadius);
@@ -1554,13 +1558,18 @@ void CGroundMoveType::HandleUnitCollisions(
 	const int dirSign = int(!reversing) * 2 - 1;
 	const float3 crushImpulse = collider->speed * collider->mass * dirSign;
 
+//	CTransportCAI* transA = dynamic_cast<CTransportCAI*>(collider->commandAI);
+
 	for (std::vector<CUnit*>::const_iterator uit = nearUnits.begin(); uit != nearUnits.end(); ++uit) {
-		CUnit* collidee = *uit;
+		CUnit* collidee = const_cast<CUnit*>(*uit);
+//		CTransportCAI* transB = dynamic_cast<CTransportCAI*>(collidee->commandAI);
 
 		if (collidee == collider) continue;
 		if (collidee->moveType->StableIsSkidding()) continue;
 		if (collidee->moveType->StableIsFlying()) continue;
 		if (collidee->StableTransporter() != NULL) continue;
+	//	if (transB && transB->LoadStillValid(collider)) continue;
+	//	if (transA && transA->LoadStillValid(collidee)) continue;
 
 		const bool colliderMobile = (collider->moveDef != NULL); // always true
 		const bool collideeMobile = (collidee->moveDef != NULL); // maybe true
@@ -1639,16 +1648,18 @@ void CGroundMoveType::HandleUnitCollisions(
 			continue;
 		}
 
-		if (collider->moveType->goalPos == collidee->moveType->StableGoalPos()) {
-			// NOTE: works, but should collision detection be doing this?
-			const float colliderGoalDistSq = (collider->moveType->goalPos - collider->pos).SqLength2D();
-			const float collideeGoalDistSq = (collidee->moveType->StableGoalPos() - collidee->StablePos()).SqLength2D();
-
-			// if both parties are nearing their shared goal, trigger
-			// Arrived if we are closest to kill long pushing contests
-			if (colliderGoalDistSq <= Square(collider->radius * 2.0f) && collideeGoalDistSq <= Square(collidee->StableRadius() * 2.0f)) {
-				if (colliderGoalDistSq < collideeGoalDistSq) {
-					atEndOfPath = true; atGoal = true;
+		if ((collider->moveType->goalPos - collidee->moveType->StableGoalPos()).SqLength2D() < 2.0f) {
+			// if collidee shares our goal position and is no longer
+			// moving along its path, trigger Arrived() to kill long
+			// pushing contests
+			// check the progress-states so collisions with units which
+			// failed to reach goalPos for whatever reason do not count
+			// (or those that still have orders)
+			if (collider->isMoving && collider->moveType->progressState == AMoveType::Active) {
+				if (!collidee->StableIsMoving() && collidee->moveType->StableProgressState() == AMoveType::Done) {
+					if (collidee->StableCommandQueEmpty()) {
+						atEndOfPath = true; atGoal = true;
+					}
 				}
 			}
 		}
@@ -1702,7 +1713,7 @@ void CGroundMoveType::HandleUnitCollisions(
 				collider->Move3D(colliderPushPos, false);
 			}
 		} else {
-			collider->Move3D(collider->moveType->oldPos, false);
+			collider->AddImpulse((collider->moveType->oldPos - collider->pos) * collideeMassScale);
 		}
 
 		if (pushCollidee) {
@@ -1712,7 +1723,7 @@ void CGroundMoveType::HandleUnitCollisions(
 				collider->QueMoveUnit(collidee, -(colResponseVec * collideeMassScale), true, true); // performs impassable test
 			}
 		} else {
-			collider->QueMoveUnitOldPos(collidee);
+			collider->QueAddImpulse(collidee, colliderMassScale);
 		}
 
 		if (collider->isMoving && collidee->StableIsMoving()) {
@@ -2254,7 +2265,11 @@ void CGroundMoveType::UpdateOwnerPos(bool wantReverse)
 		const MoveDef* md = ud->moveDef;
 
 		const int    speedSign = int(!reversing) * 2 - 1;
-		const float  speedScale = currentSpeed + deltaSpeed;
+		// LuaSyncedCtrl::SetUnitVelocity directly assigns
+		// to owner->speed which gets overridden below, so
+		// need to calculate speedScale from it directly
+		// const float  speedScale = currentSpeed + deltaSpeed;
+		const float  speedScale = owner->speed.Length() + deltaSpeed;
 		const float3 speedVector = owner->frontdir * speedScale * speedSign;
 
 		// NOTE: don't check for structure blockage, coldet handles that
@@ -2334,3 +2349,4 @@ bool CGroundMoveType::WantReverse(const float3& waypointDir2D) const
 
 	return (fwdETA > revETA);
 }
+

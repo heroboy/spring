@@ -7,7 +7,6 @@
 #include "Sim/Units/Unit.h"
 #include "TorpedoLauncher.h"
 #include "WeaponDefHandler.h"
-#include "System/mmgr.h"
 
 CR_BIND_DERIVED(CTorpedoLauncher, CWeapon, (NULL));
 
@@ -67,9 +66,13 @@ void CTorpedoLauncher::FireImpl()
 		startSpeed = weaponDir * weaponDef->startvelocity;
 	}
 
-	new CTorpedoProjectile(weaponMuzzlePos, startSpeed, owner, damageAreaOfEffect, projectileSpeed,
-		tracking, weaponDef->flighttime == 0? (int) (range / projectileSpeed + 25): weaponDef->flighttime,
-		targetUnit, weaponDef);
+	ProjectileParams params = GetProjectileParams();
+	params.pos = weaponMuzzlePos;
+	params.end = targetPos;
+	params.speed = startSpeed;
+	params.ttl = weaponDef->flighttime == 0? (int) (range / projectileSpeed + 25): weaponDef->flighttime;
+
+	new CTorpedoProjectile(params, damageAreaOfEffect, projectileSpeed, tracking);
 }
 
 bool CTorpedoLauncher::TryTarget(const float3& pos, bool userTarget, CUnit* unit)

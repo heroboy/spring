@@ -31,7 +31,22 @@ public:
 	static IPathManager* GetInstance(unsigned int type, bool async);
 
 	IPathManager();
-	virtual ~IPathManager();
+
+	// MSVC8 for some reason does not compile unless this is in the header
+	virtual ~IPathManager() {
+		if (pathBatchThread != NULL) {
+			{
+				boost::mutex::scoped_lock preqLock(preqMutex);
+				stopThread = true;
+				if (wait) {
+					wait = false;
+					cond.notify_one();
+				}
+			}
+			pathBatchThread->join();
+			pathBatchThread = NULL;
+		}
+	}
 
 	virtual void MergePathCaches() = 0;
 
@@ -142,6 +157,8 @@ public:
 	std::map<unsigned int, std::vector<PathUpdateData> > pathUpdates;
 	std::map<int, unsigned int> newPathCache;
 	static boost::thread *pathBatchThread;
+
+	virtual void UpdateFull() {}
 
 	virtual void UpdatePath(ST_FUNC const CSolidObject* owner, unsigned int pathID) {}
 	void UpdatePath(MT_WRAP const CSolidObject* owner, unsigned int pathID);
@@ -298,6 +315,7 @@ public:
 	 * @param z2
 	 *     Second corners Z-axis value, defining the rectangular area
 	 *     affected by the changes.
+	 * @param type see @TerrainChangeTypes
 	 */
 	virtual void TerrainChange(ST_FUNC unsigned int x1, unsigned int z1, unsigned int x2, unsigned int z2, unsigned int type) {}
 	void TerrainChange(MT_WRAP unsigned int x1, unsigned int z1, unsigned int x2, unsigned int z2, unsigned int type) {

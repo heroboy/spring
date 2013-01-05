@@ -8,7 +8,6 @@
 #include "Sim/Projectiles/WeaponProjectiles/WeaponProjectile.h"
 #include "Sim/Units/Unit.h"
 #include "WeaponDefHandler.h"
-#include "System/mmgr.h"
 
 CR_BIND_DERIVED(CMissileLauncher, CWeapon, (NULL));
 
@@ -72,12 +71,13 @@ void CMissileLauncher::FireImpl()
 	if (onlyForward && dynamic_cast<CStrafeAirMoveType*>(owner->moveType))
 		startSpeed += owner->speed;
 
-	new CMissileProjectile(weaponMuzzlePos, startSpeed, owner, damageAreaOfEffect,
-			projectileSpeed,
-			weaponDef->flighttime == 0
-                ? (int) (range / projectileSpeed + 25 * weaponDef->selfExplode)
-                : weaponDef->flighttime,
-			targetUnit, weaponDef, targetPos);
+	ProjectileParams params = GetProjectileParams();
+	params.pos = weaponMuzzlePos;
+	params.end = targetPos;
+	params.speed = startSpeed;
+	params.ttl = weaponDef->flighttime == 0? (int) (range / projectileSpeed + 25 * weaponDef->selfExplode): weaponDef->flighttime;
+
+	new CMissileProjectile(params, damageAreaOfEffect, projectileSpeed);
 }
 
 bool CMissileLauncher::TryTarget(const float3& pos, bool userTarget, CUnit* unit)

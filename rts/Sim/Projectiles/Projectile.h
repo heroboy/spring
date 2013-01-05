@@ -62,8 +62,8 @@ public:
 	unsigned int GetProjectileType() const { return projectileType; }
 	unsigned int GetCollisionFlags() const { return collisionFlags; }
 
-	void QueCollision(CUnit* u, LocalModelPiece* lmp, const float3& cpos, bool delay = Threading::multiThreadedSim);
-	void QueCollision(CFeature* f, const float3& cpos, bool delay = Threading::multiThreadedSim);
+	void QueCollision(CUnit* u, LocalModelPiece* lmp, const float3& cpos, const float3& cpos0, bool delay = Threading::multiThreadedSim);
+	void QueCollision(CFeature* f, const float3& cpos, const float3& cpos0, bool delay = Threading::multiThreadedSim);
 	void QueCollision(const float cpos, bool delay = Threading::multiThreadedSim);
 
 	static bool inArray;
@@ -92,10 +92,10 @@ public:
 	enum DelayOpType { UNIT_COLLISION, FEAT_COLLISION, GROUND_COLLISION };
 
 	struct DelayOp {
-		DelayOp(DelayOpType t) : type(t), unit(NULL), lmp(NULL), pos(ZeroVector) {}
-		DelayOp(DelayOpType t, CUnit* u, LocalModelPiece* l, const float3& p) : type(t), unit(u), lmp(l), pos(p) {}
-		DelayOp(DelayOpType t, CFeature* f, const float3& p) : type(t), feat(f), lmp(NULL), pos(p) {}
-		DelayOp(DelayOpType t, const float c) : type(t), feat(NULL), lmp(NULL), pos(float3(0.0f, c, 0.0f)) {}
+		DelayOp(DelayOpType t) : type(t), unit(NULL), lmp(NULL), pos(ZeroVector), pos0(ZeroVector) {}
+		DelayOp(DelayOpType t, CUnit* u, LocalModelPiece* l, const float3& p, const float3& p0) : type(t), unit(u), lmp(l), pos(p), pos0(p0) {}
+		DelayOp(DelayOpType t, CFeature* f, const float3& p, const float3& p0) : type(t), feat(f), lmp(NULL), pos(p), pos0(p0) {}
+		DelayOp(DelayOpType t, const float c) : type(t), feat(NULL), lmp(NULL), pos(float3(0.0f, c, 0.0f)), pos0(ZeroVector) {}
 		DelayOpType type;
 
 		union {
@@ -103,7 +103,7 @@ public:
 			CFeature* feat;
 		};
 		LocalModelPiece* lmp;
-		float3 pos;
+		float3 pos, pos0;
 	};
 	void ExecuteDelayOps();
 	std::deque<DelayOp> delayOps;

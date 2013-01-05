@@ -1,6 +1,5 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "System/mmgr.h"
 
 #include "MapInfo.h"
 
@@ -11,6 +10,7 @@
 #include "Lua/LuaParser.h"
 #include "System/Log/ILog.h"
 #include "System/Exceptions.h"
+#include "System/myMath.h"
 
 #if !defined(HEADLESS) && !defined(NO_SOUND)
 	#include "System/Sound/EFX.h"
@@ -60,6 +60,15 @@ CMapInfo::CMapInfo(const std::string& mapInfoFile, const string& mapName)
 	ReadSM3();
 	ReadTerrainTypes();
 	ReadSound();
+
+	if (light.groundShadowDensity > 1.0 || light.groundShadowDensity < 0.0) {
+		LOG_L(L_WARNING, "MapInfo.lua: Incorrect value \"groundShadowDensity=%f\"! Clamping to 0..1 range!!", light.groundShadowDensity);
+		light.groundShadowDensity = Clamp(light.groundShadowDensity, 0.0f, 1.0f);
+	}
+	if (light.unitShadowDensity > 1.0 || light.unitShadowDensity < 0.0) {
+		LOG_L(L_WARNING, "MapInfo.lua: Incorrect value \"unitShadowDensity=%f\"! Clamping to 0..1 range!!", light.unitShadowDensity);
+		light.unitShadowDensity = Clamp(light.unitShadowDensity, 0.0f, 1.0f);
+	}
 
 	//FIXME save all data in an array, so we can destroy the lua context (to save mem)?
 	//delete parser; 

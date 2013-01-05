@@ -23,7 +23,6 @@
 #include "System/myMath.h"
 #include "System/Sound/SoundChannels.h"
 #include "System/Sync/SyncTracer.h"
-#include "System/mmgr.h"
 
 #define PLAY_SOUNDS 1
 #if (PLAY_SOUNDS == 1)
@@ -36,8 +35,11 @@ CR_REG_METADATA(CFactory, (
 	CR_MEMBER(buildSpeed),
 	CR_MEMBER(opening),
 	CR_MEMBER(curBuild),
+	CR_MEMBER(curBuildPower),
 	CR_MEMBER(nextBuildUnitDefID),
 	CR_MEMBER(lastBuildUpdateFrame),
+	CR_MEMBER(nanoPieces),
+	CR_MEMBER(lastNanoPieceCnt),
 	CR_RESERVED(16),
 	CR_POSTLOAD(PostLoad)
 ));
@@ -51,9 +53,11 @@ CFactory::CFactory():
 	opening(false),
 	curBuildDef(NULL),
 	curBuild(NULL),
+	curBuildPower(0),
 	nextBuildUnitDefID(-1),
 	lastBuildUpdateFrame(-1),
-	finishedBuildFunc(NULL)
+	finishedBuildFunc(NULL),
+	lastNanoPieceCnt(0)
 {
 }
 
@@ -101,6 +105,8 @@ float3 CFactory::CalcBuildPos(int buildPiece)
 
 void CFactory::Update()
 {
+	curBuildPower >>= 1;
+
 	if (beingBuilt) {
 		// factory is under construction, cannot build anything yet
 		CUnit::Update();
@@ -436,13 +442,32 @@ void CFactory::AssignBuildeeOrders(CUnit* unit) {
 		}
 
 		c.PushPos(tmpPos);
-		unit->commandAI->GiveCommand(c);
+	} else {
+		// dummy rallypoint for aircraft
+		c.PushPos(unit->pos);
 	}
 
-	for (CCommandQueue::const_iterator ci = newUnitCmds.begin(); ci != newUnitCmds.end(); ++ci) {
-		c = *ci;
-		c.options |= SHIFT_KEY;
+	if (unit->commandAI->commandQue.empty()) {
 		unit->commandAI->GiveCommand(c);
+
+		// copy factory orders
+		for (CCommandQueue::const_iterator ci = newUnitCmds.begin(); ci != newUnitCmds.end(); ++ci) {
+			c = *ci;
+			c.options |= SHIFT_KEY;
+
+			if (c.GetID() == CMD_MOVE) {
+				const float3 p1 = c.GetPos(0);
+				const float3 p2 = float3(p1.x + gs->randFloat() * TWOPI, p1.y, p1.z + gs->randFloat() * TWOPI);
+				// apply a small amount of random jitter to move commands
+				// such that new units do not all share the same goal-pos
+				// and start forming a "trail" back to the factory exit
+				c.SetPos(0, p2);
+			}
+
+			unit->commandAI->GiveCommand(c);
+		}
+	} else {
+		unit->commandAI->commandQue.push_front(c);
 	}
 }
 
@@ -457,7 +482,38 @@ bool CFactory::ChangeTeam(int newTeam, ChangeType type)
 
 void CFactory::CreateNanoParticle(bool highPriority)
 {
-	const int piece = script->QueryNanoPiece();
+	assert(UNIT_SLOWUPDATE_RATE == 16);
+	curBuildPower |= 1 << 15;
+
+	int piece = -1;
+	if (!nanoPieces.empty()) {
+		const unsigned cnt = nanoPieces.size();
+		const unsigned rnd = gs->randInt();
+		piece = nanoPieces[rnd % cnt];
+	}
+
+	if (lastNanoPieceCnt <= 30) { // only do so 30 times and then use the cache
+		const int p = script->QueryNanoPiece();
+		if (p >= 0) {
+			piece = p;
+
+			bool found = false;
+			for (std::vector<int>::const_iterator it = nanoPieces.begin(); it != nanoPieces.end(); ++it) {
+				if (piece == *it) {
+					lastNanoPieceCnt++;
+					found = true;
+					break;
+				}
+			}
+
+			if (!found) {
+				nanoPieces.push_back(piece);
+				lastNanoPieceCnt = 0;
+			}
+		} else {
+			lastNanoPieceCnt++;
+		}
+	}
 
 #ifdef USE_GML
 	if (GML::Enabled() && ((gs->frameNum - lastDrawFrame) > 20))

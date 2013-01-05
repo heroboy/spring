@@ -7,9 +7,9 @@
 
 #include <fstream>
 #include <boost/bind.hpp>
+#include <boost/thread/barrier.hpp>
 
 #include "minizip/zip.h"
-#include "System/mmgr.h"
 
 #include "PathAllocator.h"
 #include "PathCache.h"
@@ -22,13 +22,16 @@
 #include "Sim/MoveTypes/MoveMath/MoveMath.h"
 #include "Sim/Units/Unit.h"
 #include "Sim/Units/UnitDef.h"
+#include "System/NetProtocol.h"
+#include "System/TimeProfiler.h"
+#include "System/Config/ConfigHandler.h"
 #include "System/FileSystem/Archives/IArchive.h"
 #include "System/FileSystem/ArchiveLoader.h"
 #include "System/FileSystem/DataDirsAccess.h"
 #include "System/FileSystem/FileSystem.h"
 #include "System/FileSystem/FileQueryFlags.h"
-#include "System/Config/ConfigHandler.h"
-#include "System/NetProtocol.h"
+#include "System/Platform/Watchdog.h"
+
 
 CONFIG(int, MaxPathCostsMemoryFootPrint).defaultValue(512 * 1024 * 1024);
 
@@ -40,10 +43,8 @@ static size_t GetNumThreads() {
 	return ((numThreads == 0)? numCores: numThreads);
 }
 
-#if !defined(USE_MMGR)
 void* CPathEstimator::operator new(size_t size) { return PathAllocator::Alloc(size); }
 void CPathEstimator::operator delete(void* p, size_t size) { PathAllocator::Free(p, size); }
-#endif
 
 
 
@@ -193,6 +194,8 @@ void CPathEstimator::InitBlocks() {
 void CPathEstimator::CalcOffsetsAndPathCosts(int thread) {
 	//! reset FPU state for synced computations
 	streflop::streflop_init<streflop::Simple>();
+	//Threading::SetAffinity(i<<thread);
+	Threading::SetAffinity(~0);
 
 	// NOTE: EstimatePathCosts() [B] is temporally dependent on CalculateBlockOffsets() [A],
 	// A must be completely finished before B_i can be safely called. This means we cannot
@@ -223,7 +226,7 @@ void CPathEstimator::CalculateBlockOffsets(int idx, int thread)
 
 	for (vector<MoveDef*>::iterator mi = moveDefHandler->moveDefs.begin(); mi != moveDefHandler->moveDefs.end(); ++mi) {
 		if ((*mi)->unitDefRefCount > 0) {
-			FindOffset(**mi, x, z);
+			blockStates.peNodeOffsets[idx][(*mi)->pathType] = FindOffset(**mi, x, z);
 		}
 	}
 }
@@ -255,7 +258,7 @@ void CPathEstimator::EstimatePathCosts(int idx, int thread) {
 /**
  * Finds a square accessable by the given MoveDef within the given block
  */
-void CPathEstimator::FindOffset(const MoveDef& moveDef, int blockX, int blockZ) {
+int2 CPathEstimator::FindOffset(const MoveDef& moveDef, int blockX, int blockZ) const {
 	//! lower corner position of block
 	const int lowerX = blockX * BLOCK_SIZE;
 	const int lowerZ = blockZ * BLOCK_SIZE;
@@ -305,8 +308,8 @@ void CPathEstimator::FindOffset(const MoveDef& moveDef, int blockX, int blockZ) 
 			CMoveMath::IsBlockedStructureZmax(moveDef, lowerX, lowerZ + z, NULL));
 	}
 
-	// store the offset found
-	blockStates.peNodeOffsets[blockZ * nbrOfBlocksX + blockX][moveDef.pathType] = int2(blockX * BLOCK_SIZE + bestPosX, blockZ * BLOCK_SIZE + bestPosZ);
+	// return the offset found
+	return int2(blockX * BLOCK_SIZE + bestPosX, blockZ * BLOCK_SIZE + bestPosZ);
 }
 
 
@@ -425,23 +428,66 @@ void CPathEstimator::MapChanged(unsigned int x1, unsigned int z1, unsigned int x
 void CPathEstimator::Update() {
 	pathCache->Update();
 
-	for (unsigned int n = 0; !needUpdate.empty() && n < BLOCKS_TO_UPDATE; ) {
+	if (needUpdate.empty())
+		return;
+
+	const unsigned int progressiveUpdates = needUpdate.size() * 0.01f * ((BLOCK_SIZE >= 16)? 1.0f : 0.6f);
+	const int blocksToUpdate = std::max(BLOCKS_TO_UPDATE, progressiveUpdates);
+
+	std::vector<SingleBlock> v;
+	v.reserve(blocksToUpdate);
+
+	// CalculateVertices (not threadsafe)
+	for (int n = 0; !needUpdate.empty() && n < blocksToUpdate; ) {
 		// copy the next block in line
 		const SingleBlock sb = needUpdate.front();
-
-		const unsigned int blockX = sb.block.x;
-		const unsigned int blockZ = sb.block.y;
-		const unsigned int blockN = blockZ * nbrOfBlocksX + blockX;
-
 		needUpdate.pop_front();
+
+		const unsigned int blockN = sb.block.y * nbrOfBlocksX + sb.block.x;
 
 		// check if it's not already updated
 		if (blockStates.nodeMask[blockN] & PATHOPT_OBSOLETE) {
+			// no need to check for duplicates, cause FindOffset is deterministic
+			// and so even when we compute it multiple times the result will be the same
+			v.push_back(sb);
+
+			// one stale SingleBlock consumed
+			n++;
+		}
+	}
+
+	// FindOffset (threadsafe)
+	{
+		SCOPED_TIMER("CPathEstimator::FindOffset");
+		#pragma omp parallel for
+		for (int n = 0; n < v.size(); ++n) {
+			// copy the next block in line
+			const SingleBlock sb = v[n];
+
+			const unsigned int blockX = sb.block.x;
+			const unsigned int blockZ = sb.block.y;
+			const unsigned int blockN = blockZ * nbrOfBlocksX + blockX;
+
+			const MoveDef* currBlockMD = sb.moveDef;
+
+			blockStates.peNodeOffsets[blockN][currBlockMD->pathType] = FindOffset(*currBlockMD, blockX, blockZ);
+		}
+	}
+
+	// CalculateVertices (not threadsafe)
+	{
+		SCOPED_TIMER("CPathEstimator::CalculateVertices");
+		for (int n = 0; n < v.size(); ++n) {
+			// copy the next block in line
+			const SingleBlock sb = v[n];
+
+			const unsigned int blockX = sb.block.x;
+			const unsigned int blockZ = sb.block.y;
+			const unsigned int blockN = blockZ * nbrOfBlocksX + blockX;
+
 			const MoveDef* currBlockMD = sb.moveDef;
 			const MoveDef* nextBlockMD = (needUpdate.empty())? NULL: (needUpdate.front()).moveDef;
 
-			// no, update the block
-			FindOffset(*currBlockMD, blockX, blockZ);
 			CalculateVertices(*currBlockMD, blockX, blockZ);
 
 			// each MapChanged() call adds AT MOST <moveDefs.size()> SingleBlock's
@@ -451,10 +497,17 @@ void CPathEstimator::Update() {
 			if (nextBlockMD == NULL || nextBlockMD->pathType <= currBlockMD->pathType) {
 				blockStates.nodeMask[blockN] &= ~PATHOPT_OBSOLETE;
 			}
-
-			// one stale SingleBlock consumed
-			n++;
 		}
+	}
+
+	v.clear();
+}
+
+
+void CPathEstimator::UpdateFull() {
+	while (!needUpdate.empty()) {
+		Update();
+		Watchdog::ClearTimer();
 	}
 }
 
@@ -744,14 +797,11 @@ void CPathEstimator::FinishSearch(const MoveDef& moveDef, IPath::Path& foundPath
 	while (block.x != startBlock.x || block.y != startBlock.y) {
 		const int blockIdx = block.y * nbrOfBlocksX + block.x;
 
-		{
-			// use offset defined by the block
-			const int xBSquare = blockStates.peNodeOffsets[blockIdx][moveDef.pathType].x;
-			const int zBSquare = blockStates.peNodeOffsets[blockIdx][moveDef.pathType].y;
-			const float3& pos = SquareToFloat3(xBSquare, zBSquare);
+		// use offset defined by the block
+		int2 bsquare = blockStates.peNodeOffsets[blockIdx][moveDef.pathType];
+		const float3& pos = SquareToFloat3(bsquare.x, bsquare.y);
 
-			foundPath.path.push_back(pos);
-		}
+		foundPath.path.push_back(pos);
 
 		// next step backwards
 		block = blockStates.peParentNodePos[blockIdx];

@@ -14,14 +14,18 @@ SEVENZIP="nice -19 ionice -c3 7z a -t7z -m0=lzma -mx=9 -mfb=64 -md=32m -ms=on -m
 ZIP="zip -r9"
 
 MINGWLIBS_PATH=${1}
-MINGW_HOST=i586-mingw32msvc-
+
+#use host from env if set
+if [ -z "$MINGW_HOST" ]; then
+	MINGW_HOST=i586-mingw32msvc-
+fi
 
 cd ${BUILDDIR}
 make install DESTDIR=${DEST}
 
 #strip symbols and archive them
 cd ${INSTALLDIR}
-EXECUTABLES="spring.exe spring-dedicated.exe spring-multithreaded.exe spring-headless.exe unitsync.dll springserver.dll $(find AI/Skirmish -name SkirmishAI.dll) $(find AI/Interfaces -name AIInterface.dll)"
+EXECUTABLES="spring.exe spring-dedicated.exe spring-multithreaded.exe spring-headless.exe unitsync.dll springserver.dll $(find AI/Skirmish -name SkirmishAI.dll) $(find AI/Interfaces -name AIInterface.dll) $(find -name pr-downloader.exe -or -name pr-downloader_shared.dll -printf '%f ')"
 for tostripfile in ${EXECUTABLES}; do
 	if [ -f ${tostripfile} ]; then
 		# dont strip binaries that we processed earlier

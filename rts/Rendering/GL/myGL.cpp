@@ -8,7 +8,6 @@
 #include <windef.h>
 #endif
 
-#include "System/mmgr.h"
 #include "myGL.h"
 #include "VertexArray.h"
 #include "VertexArrayRange.h"
@@ -27,6 +26,7 @@
 
 
 CONFIG(bool, DisableCrappyGPUWarning).defaultValue(false);
+CONFIG(bool, ReportGLErrors).defaultValue(false);
 CONFIG(bool, StacktraceOnGLErrors).defaultValue(false).description("Create a stacktrace when an OpenGL error occurs (only available in DEBUG builds)");
 
 
@@ -205,13 +205,18 @@ static bool GetAvailableVideoRAM(GLint* memory)
 #endif
 }
 
-#if       !defined DEBUG
+
 static void ShowCrappyGpuWarning(const char* glVendor, const char* glRenderer)
 {
+#ifdef DEBUG
+	{ return; }
+#endif
+
 	// Print out warnings for really crappy graphic cards/drivers
 	const std::string gfxCardVendor = (glVendor != NULL)? glVendor: "UNKNOWN";
 	const std::string gfxCardModel  = (glRenderer != NULL)? glRenderer: "UNKNOWN";
 	bool gfxCardIsCrap = false;
+	bool msDrivers = false;
 
 	if (gfxCardVendor == "SiS") {
 		gfxCardIsCrap = true;
@@ -222,6 +227,8 @@ static void ShowCrappyGpuWarning(const char* glVendor, const char* glRenderer)
 		} else if (gfxCardModel.find(" 915G") != std::string::npos) {
 			gfxCardIsCrap = true;
 		}
+	} else if (gfxCardVendor.find("Microsoft") != std::string::npos) {
+		msDrivers = true;
 	}
 
 	if (gfxCardIsCrap) {
@@ -237,28 +244,50 @@ static void ShowCrappyGpuWarning(const char* glVendor, const char* glRenderer)
 		LOG_L(L_WARNING, "If the game crashes, looks ugly or runs slow, buy a better card!");
 		LOG_L(L_WARNING, ".");
 	}
+	if (msDrivers) {
+		LOG_L(L_WARNING, "WW     WWW     WW    AAA     RRRRR   NNN  NN  II  NNN  NN   GGGGG ");
+		LOG_L(L_WARNING, " WW   WW WW   WW    AA AA    RR  RR  NNNN NN  II  NNNN NN  GG     ");
+		LOG_L(L_WARNING, "  WW WW   WW WW    AAAAAAA   RRRRR   NN NNNN  II  NN NNNN  GG   GG");
+		LOG_L(L_WARNING, "   WWW     WWW    AA     AA  RR  RR  NN  NNN  II  NN  NNN   GGGGG ");
+		LOG_L(L_WARNING, "(warning)");
+		LOG_L(L_WARNING, "No OpenGL drivers installed.");
+		LOG_L(L_WARNING, "Please go to your GPU vendor's website and download their drivers.");
+		LOG_L(L_WARNING, ".");
+	}
 
 	if (!configHandler->GetBool("DisableCrappyGPUWarning")) {
 		if (gfxCardIsCrap) {
-			std::string msg =
+			const std::string msg =
 				"Warning!\n"
 				"Your graphics card is insufficient to play Spring.\n\n"
 				"If the game crashes, looks ugly or runs slow, buy a better card!\n"
 				"You may try \"spring --safemode\" to test if some of your issues are related to wrong settings.\n"
 				"\nHint: You can disable this MessageBox by appending \"DisableCrappyGPUWarning = 1\" to \"" + configHandler->GetConfigFile() + "\".";
+			LOG_L(L_WARNING, "%s", msg.c_str());
 			Platform::MsgBox(msg, "Warning: Your GPU is not supported", MBF_EXCL);
 		} else if (globalRendering->haveMesa) {
-			std::string mesa_msg =
+			const std::string mesa_msg =
 				"Warning!\n"
 				"OpenSource graphics card drivers detected.\n"
-				"MesaGL/Gallium drivers are not able to run Spring. Try to switch to proprietary drivers.\n\n"
+				"MesaGL/Gallium drivers don't work well with Spring. Try to switch to proprietary drivers.\n\n"
 				"You may try \"spring --safemode\".\n"
 				"\nHint: You can disable this MessageBox by appending \"DisableCrappyGPUWarning = 1\" to \"" + configHandler->GetConfigFile() + "\".";
+			LOG_L(L_WARNING, "%s", mesa_msg.c_str());
 			Platform::MsgBox(mesa_msg, "Warning: Your GPU driver is not supported", MBF_EXCL);
+		} else if (msDrivers) {
+			const std::string mesa_msg =
+				"Warning!\n"
+				"No OpenGL drivers installed.\n"
+				"Please go to your GPU vendor's website and download their drivers:\n"
+				" * Nvidia: http://www.nvidia.com\n"
+				" * AMD: http://support.amd.com\n"
+				" * Intel: http://downloadcenter.intel.com";
+			LOG_L(L_WARNING, "%s", mesa_msg.c_str());
+			Platform::MsgBox(mesa_msg, "Warning: No OpenGL drivers found", MBF_EXCL);
 		}
 	}
 }
-#endif
+
 
 //FIXME move most of this to globalRendering's ctor?
 void LoadExtensions()
@@ -294,9 +323,7 @@ void LoadExtensions()
 	LOG("GLEW version: %s", glewVersion);
 	LOG("Video RAM:    %s", glVidMemStr);
 
-#if       !defined DEBUG
 	ShowCrappyGpuWarning(glVendor, glRenderer);
-#endif // !defined DEBUG
 
 	/*{
 		std::string s = (char*)glGetString(GL_EXTENSIONS);
@@ -334,8 +361,9 @@ void LoadExtensions()
 		handleerror(0, errorMsg, "Update graphic drivers", 0);
 	}
 
-#if defined(GL_ARB_debug_output) && !defined(HEADLESS) //! it's not defined in older GLEW versions
-	if (GLEW_ARB_debug_output) {
+	// install OpenGL DebugMessageCallback
+#if defined(GL_ARB_debug_output) && !defined(HEADLESS)
+	if (GLEW_ARB_debug_output && configHandler->GetBool("ReportGLErrors")) {
 		LOG("Installing OpenGL-DebugMessageHandler");
 		glDebugMessageCallbackARB(&OpenGLDebugMessageCallback, NULL);
 
@@ -382,8 +410,6 @@ void WorkaroundATIPointSizeBug()
 
 void glBuildMipmaps(const GLenum target, GLint internalFormat, const GLsizei width, const GLsizei height, const GLenum format, const GLenum type, const void* data)
 {
-	ScopedTimer timer("Textures::glBuildMipmaps");
-
 	if (globalRendering->compressTextures) {
 		switch ( internalFormat ) {
 			case 4:

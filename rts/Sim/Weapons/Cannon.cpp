@@ -12,7 +12,6 @@
 #include "WeaponDefHandler.h"
 #include "System/myMath.h"
 #include "System/FastMath.h"
-#include "System/mmgr.h"
 
 CR_BIND_DERIVED(CCannon, CWeapon, (NULL));
 
@@ -64,7 +63,6 @@ void CCannon::UpdateRange(float val)
 {
 	range = val;
 	// initialize range factor
-	rangeFactor = 1;
 	rangeFactor = (float)range/GetRange2D(0);
 	// do not extend range if the modder specified speed too low
 	// for the projectile to reach specified range
@@ -182,8 +180,12 @@ void CCannon::FireImpl()
 		ttl=predict*2;
 	}
 
-	new CExplosiveProjectile(weaponMuzzlePos, dir * projectileSpeed, owner,
-		weaponDef, ttl, damageAreaOfEffect, gravity);
+	ProjectileParams params = GetProjectileParams();
+	params.pos = weaponMuzzlePos;
+	params.speed = dir * projectileSpeed;
+	params.ttl = ttl;
+
+	new CExplosiveProjectile(params, damageAreaOfEffect, gravity);
 }
 
 void CCannon::SlowUpdate()

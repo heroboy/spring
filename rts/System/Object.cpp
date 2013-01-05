@@ -2,18 +2,12 @@
 
 
 #include "System/Object.h"
-#include "System/mmgr.h"
 #include "System/creg/STL_Set.h"
 #include "System/Log/ILog.h"
 #include "System/Platform/CrashHandler.h"
 #if MULTITHREADED_SIM
 #include "System/Platform/Synchro.h"
 Threading::Mutex depMutex;
-#endif
-
-#ifndef USE_MMGR
-# define m_setOwner(file, line, func)
-# define m_resetGlobals()
 #endif
 
 
@@ -57,10 +51,8 @@ void CObject::Detach()
 		for (TSyncSafeSet::iterator di = objs.begin(); di != objs.end(); ++di) {
 			CObject* const& obj = (*di);
 			
-			m_setOwner(__FILE__, __LINE__, __FUNCTION__);
 			obj->DependentDied(this);
 
-			m_setOwner(__FILE__, __LINE__, __FUNCTION__);
 			assert(obj->listening.find(depType) != obj->listening.end());
 			obj->listening[depType].erase(this);
 		}
@@ -72,12 +64,10 @@ void CObject::Detach()
 		for (TSyncSafeSet::iterator di = objs.begin(); di != objs.end(); ++di) {
 			CObject* const& obj = (*di);
 
-			m_setOwner(__FILE__, __LINE__, __FUNCTION__);
 			assert(obj->listeners.find(depType) != obj->listeners.end());
 			obj->listeners[depType].erase(this);
 		}
 	}
-	m_resetGlobals();
 }
 
 
@@ -138,12 +128,10 @@ void CObject::PostLoad()
 	assert(false);
 	/*for (std::map<DependenceType, TSyncSafeSet >::iterator i = listening.begin(); i != listening.end(); ++i) {
 		for (TSyncSafeSet::iterator oi = i->second.begin(); oi != i->second.end(); ++oi) {
-			m_setOwner(__FILE__, __LINE__, __FUNCTION__);
 			TSyncSafeSet& dl = (*oi)->listeners[i->first];
 			dl.insert(this);
 		}
 	}*/
-	m_resetGlobals();
 }
 
 void CObject::DependentDied(CObject* obj)
@@ -159,12 +147,9 @@ void CObject::AddDeathDependence(CObject* obj, DependenceType dep)
 	Threading::ScopedLock depLock(depMutex, Threading::multiThreadedSim); // AddDeathDependence
 #endif
 	assert(!detached);
-	m_setOwner(__FILE__, __LINE__, __FUNCTION__);
 	listening[dep].insert(obj);
 
-	m_setOwner(__FILE__, __LINE__, __FUNCTION__);
 	obj->listeners[dep].insert(this);
-	m_resetGlobals();
 }
 
 
@@ -174,10 +159,7 @@ void CObject::DeleteDeathDependence(CObject* obj, DependenceType dep)
 	Threading::ScopedLock depLock(depMutex, Threading::multiThreadedSim); // DeleteDeathDependence
 #endif
 	assert(!detached);
-	m_setOwner(__FILE__, __LINE__, __FUNCTION__);
 	obj->listeners[dep].erase(this);
 
-	m_setOwner(__FILE__, __LINE__, __FUNCTION__);
 	listening[dep].erase(obj);
-	m_resetGlobals();
 }

@@ -96,7 +96,8 @@ public:
 		GETAIRBASEPADPOS,
 		MOVE_UNIT_OLDPOS,
 		CHANGE_TARGETHEADING,
-		SMOKE_PROJECTILE
+		SMOKE_PROJECTILE,
+		ADD_UNIT_IMPULSE
 	};
 	struct DelayOp {
 		DelayOp(DelayOpType t) : type(t), obj(NULL), vec(ZeroVector), damage(0.0f), dmgtype(0) {}
@@ -116,7 +117,7 @@ public:
 		};
 		float3 vec;
 		union {
-			float damage, mult, amount;
+			float damage, mult, amount, mscale;
 			bool relative, crush, bset, deathseq;
 		};
 		union {
@@ -236,6 +237,7 @@ public:
 	bool isMoving;                              ///< = velocity.length() > 0.0
 	bool isUnderWater;                          ///< true if this object is completely submerged (pos + height < 0)
 	bool isMarkedOnBlockingMap;                 ///< true if this object is currently marked on the GroundBlockingMap
+	float3 groundBlockPos;
 
 	float3 speed;                               ///< current velocity vector (length in elmos/frame)
 	float3 residualImpulse;                     ///< Used to sum up external impulses.

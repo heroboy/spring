@@ -8,7 +8,6 @@
 #include <map>
 #include <cctype>
 
-#include "System/mmgr.h"
 
 #include "LuaUnitDefs.h"
 
@@ -312,6 +311,17 @@ static int WeaponDefToID(lua_State* L, const void* data)
 }
 
 
+static int WeaponDefToName(lua_State* L, const void* data)
+{
+	const WeaponDef* wd = *((const WeaponDef**)data);
+	if (wd == NULL) {
+		return 0;
+	}
+	lua_pushsstring(L, wd->name);
+	return 1;
+}
+
+
 static int SafeIconType(lua_State* L, const void* data)
 {
 	// the iconType is unsynced because LuaUI has SetUnitDefIcon()
@@ -529,11 +539,12 @@ static int TotalEnergyOut(lua_State* L, const void* data)
 
 static int ModelTable(lua_State* L, const void* data) {
 	const UnitDef* ud = static_cast<const UnitDef*>(data);
+	const std::string modelFile = modelParser->Find(ud->modelName);
 
 	lua_newtable(L);
-	HSTR_PUSH_STRING(L, "type", FileSystem::GetExtension(ud->modelName));
-	HSTR_PUSH_STRING(L, "path", "objects3d/" + ud->modelName); // backward compability
-	HSTR_PUSH_STRING(L, "name",                ud->modelName);
+	HSTR_PUSH_STRING(L, "type", StringToLower(FileSystem::GetExtension(modelFile)));
+	HSTR_PUSH_STRING(L, "path", modelFile);
+	HSTR_PUSH_STRING(L, "name", ud->modelName);
 	HSTR_PUSH(L, "textures");
 
 	lua_newtable(L);
@@ -660,8 +671,9 @@ ADD_BOOL("canAttackWater",  canAttackWater); // CUSTOM
 	ADD_STRING("tooltip", ud.tooltip);
 
 	ADD_STRING("wreckName", ud.wreckName);
-	ADD_STRING("deathExplosion", ud.deathExpWeaponDef->name);
-	ADD_STRING("selfDExplosion", ud.selfdExpWeaponDef->name);
+
+	ADD_FUNCTION("deathExplosion", ud.deathExpWeaponDef, WeaponDefToName);
+	ADD_FUNCTION("selfDExplosion", ud.selfdExpWeaponDef, WeaponDefToName);
 
 	ADD_STRING("buildpicname", ud.buildPicName);
 

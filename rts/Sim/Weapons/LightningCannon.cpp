@@ -1,6 +1,5 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#include "System/mmgr.h"
 
 #include "LightningCannon.h"
 #include "WeaponDefHandler.h"
@@ -164,15 +163,11 @@ void CLightningCannon::FireImpl()
 
 	helper->Explosion(params);
 
-	new CLightningProjectile(
-		curPos,
-		curPos + curDir * (boltLength + 10.0f),
-		owner,
-		color,
-		weaponDef,
-		10,
-		this
-	);
+	ProjectileParams pparams = GetProjectileParams();
+	pparams.pos = curPos;
+	pparams.end = curPos + curDir * (boltLength + 10.0f);
+	pparams.ttl = 10;
+	new CLightningProjectile(pparams, color);
 }
 
 

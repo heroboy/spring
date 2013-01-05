@@ -55,6 +55,7 @@ public:
 	std::string MapFile() const;
 	std::string mapName;
 	std::string modName;
+	std::string gameID;
 	bool useLuaGaia;
 
 	std::string gameSetupText;
@@ -73,7 +74,7 @@ public:
 	std::map<std::string, std::string> mapOptions;
 	std::map<std::string, std::string> modOptions;
 
-	int maxUnits;
+	int maxUnitsPerTeam;
 
 	bool ghostedBuildings;
 	bool disableMapDamage;

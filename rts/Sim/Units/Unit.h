@@ -584,6 +584,7 @@ public:
 	void QueMoveUnitOldPos(CSolidObject *o, bool delay = Threading::multiThreadedSim);
 	void QueChangeTargetHeading(int heading, bool delay = Threading::multiThreadedSim);
 	void QueSmokeProjectile(bool delay = Threading::multiThreadedSim);
+	void QueAddImpulse(CSolidObject *o, float massScale, bool delay = Threading::multiThreadedSim);
 	void QueUpdateLOS(bool delay = Threading::multiThreadedSim);
 	void QueUpdateRadar(bool delay = Threading::multiThreadedSim);
 	void QueUpdateQuad(bool delay = Threading::multiThreadedSim);
@@ -597,6 +598,8 @@ public:
 private:
 	/// if we are stunned by a weapon or for other reason, access via IsStunned/SetStunned(bool)
 	bool stunned;
+
+	static float empDecline;
 };
 
 #endif // UNIT_H
