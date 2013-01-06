@@ -365,7 +365,7 @@ static void CopyShaderState_TransformFeedback(GLuint newProgID, GLuint oldProgID
 		varyingsPtr[i] = &varyings[i][0];
 	}
 
-	glTransformFeedbackVaryings(newProgID, numVaryings, (const GLchar**)&varyingsPtr[0], bufferMode);
+	glTransformFeedbackVaryings(newProgID, numVaryings, varyingsPtr.empty() ? NULL : (const GLchar**)&varyingsPtr[0], bufferMode);
 #endif
 }
 

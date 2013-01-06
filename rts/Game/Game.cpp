@@ -564,9 +564,7 @@ void CGame::PostLoadSimulation()
 	CGroundMoveType::CreateLineTable();
 
 	uh = new CUnitHandler();
-	LOG_L(L_WARNING, "PH");
 	ph = new CProjectileHandler();
-	LOG_L(L_WARNING, "FH");
 
 	loadscreen->SetLoadMessage("Loading Feature Definitions");
 	featureHandler = new CFeatureHandler();
