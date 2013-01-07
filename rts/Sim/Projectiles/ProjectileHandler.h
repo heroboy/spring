@@ -70,8 +70,8 @@ public:
 	}
 
 	void CheckUnitCollisions(CProjectile*, std::vector<CUnit*>&, const float3&, const float3&);
-	void ProjectileCollisionThreadFunc();
-	void ProjectileCollisionNonThreadFunc();
+	void ProjectileCollisionThreadFunc(bool threaded);
+
 	void CheckFeatureCollisions(CProjectile*, std::vector<CFeature*>&, const float3&, const float3&);
 	void CheckCollisions();
 	void CheckCollisionsThreaded(ProjectileContainer &pc, int curPos, int& nextPos);

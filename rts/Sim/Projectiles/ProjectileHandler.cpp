@@ -23,10 +23,14 @@
 #include "System/Config/ConfigHandler.h"
 #include "System/EventHandler.h"
 #include "System/Log/ILog.h"
+#include "System/Platform/SimThreadPool.h"
 #include "System/TimeProfiler.h"
 #include "System/creg/STL_Map.h"
 #include "System/creg/STL_List.h"
 #include "lib/gml/gmlmut.h"
+
+extern CSimThreadPool* simThreadPool;
+static void ProjectileCollisionThreadFuncStatic(bool threaded) { ph->ProjectileCollisionThreadFunc(threaded); }
 
 // reserve 5% of maxNanoParticles for important stuff such as capture and reclaim other teams' units
 #define NORMAL_NANO_PRIO 0.95f
@@ -485,34 +489,33 @@ inline void CProjectileHandler::CheckProjectileCollision(CProjectile *p) {
 
 void CProjectileHandler::CheckCollisionsThreaded(ProjectileContainer &pc, int curPos, int& nextPos) {
 	int countEnd = curPos + pc.size();
-	for(ProjectileContainer::iterator pi = pc.begin(); nextPos < countEnd; nextPos = ++uh->atomicCount) {
+	for(ProjectileContainer::iterator pi = pc.begin(); nextPos < countEnd; nextPos = simThreadPool->NextIter()) {
 		while(curPos < nextPos) { ++pi; ++curPos; }
 		CheckProjectileCollision(*pi);
 	}
 }
 
-void CProjectileHandler::ProjectileCollisionThreadFunc() {
-	int nextPos = ++uh->atomicCount;
+void CProjectileHandler::ProjectileCollisionThreadFunc(bool threaded) {
+	if (!threaded) {
+		for (ProjectileContainer::iterator pi = syncedProjectiles.begin(); pi != syncedProjectiles.end(); ++pi) {
+			CheckProjectileCollision(*pi);
+		}
+		for (ProjectileContainer::iterator pi = unsyncedProjectiles.begin(); pi != unsyncedProjectiles.end(); ++pi) {
+			CheckProjectileCollision(*pi);
+		}
+		return;
+	}
+	// (threaded)
+	int nextPos = simThreadPool->NextIter();
 	CheckCollisionsThreaded(syncedProjectiles, 0, nextPos);
 	CheckCollisionsThreaded(unsyncedProjectiles, syncedProjectiles.size(), nextPos);
-}
-
-void CProjectileHandler::ProjectileCollisionNonThreadFunc() {
-	for (ProjectileContainer::iterator pi = syncedProjectiles.begin(); pi != syncedProjectiles.end(); ++pi) {
-		CheckProjectileCollision(*pi);
-	}
-	for (ProjectileContainer::iterator pi = unsyncedProjectiles.begin(); pi != unsyncedProjectiles.end(); ++pi) {
-		CheckProjectileCollision(*pi);
-	}
 }
 
 void CProjectileHandler::CheckCollisions() {
 	SCOPED_TIMER("ProjectileHandler::CheckCollisions");
 
 	Threading::SetMultiThreadedSim(modInfo.multiThreadSim);
-	uh->simThreadingStage = CUnitHandler::PROJECTILE_COLLISION;
-	// Use the current thread as thread zero. FIRE!
-	uh->MoveTypeThreadFunc(0);
+	simThreadPool->Execute(&ProjectileCollisionThreadFuncStatic);
 	Threading::SetMultiThreadedSim(false);
 
 	if (modInfo.multiThreadSim) {

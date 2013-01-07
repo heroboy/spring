@@ -24,6 +24,7 @@
 #include "System/EventHandler.h"
 #include "System/EventBatchHandler.h"
 #include "System/Log/ILog.h"
+#include "System/Platform/SimThreadPool.h"
 #include "System/TimeProfiler.h"
 #include "System/myMath.h"
 #include "System/Sync/SyncTracer.h"
@@ -38,6 +39,11 @@ CONFIG(int, SimThreadCount).defaultValue(0).safemodeValue(1).minimumValue(0).max
 //////////////////////////////////////////////////////////////////////
 
 CUnitHandler* uh = NULL;
+CSimThreadPool* simThreadPool = NULL;
+static void UpdateMoveTypeThreadFuncStatic(bool threaded) { uh->UpdateMoveTypeThreadFunc(threaded); }
+static void SlowUpdateMoveTypeInitThreadFuncStatic(bool threaded) { uh->SlowUpdateMoveTypeInitThreadFunc(threaded); }
+static void SlowUpdateMoveTypeThreadFuncStatic(bool threaded) { uh->SlowUpdateMoveTypeThreadFunc(threaded); }
+static void DelayedSlowUpdateMoveTypeThreadFuncStatic(bool threaded) { uh->DelayedSlowUpdateMoveTypeThreadFunc(threaded); }
 
 CR_BIND(CUnitHandler, );
 CR_REG_METADATA(CUnitHandler, (
@@ -67,11 +73,7 @@ CUnitHandler::CUnitHandler()
 :
 	maxUnitRadius(0.0f),
 	morphUnitToFeature(true),
-	maxUnits(0),
-	stopThread(false),
-	simThreadingStage(UPDATE_MOVETYPE),
-	atomicCount(-1),
-	simBarrier(NULL)
+	maxUnits(0)
 {
 	// set the global (runtime-constant) unit-limit as the sum
 	// of  all team unit-limits, which is *always* <= MAX_UNITS
@@ -83,21 +85,6 @@ CUnitHandler::CUnitHandler()
 	for (unsigned int n = 0; n < teamHandler->ActiveTeams(); n++) {
 		maxUnits += teamHandler->Team(n)->GetMaxUnits();
 	}
-
-	int numThreads = std::max(0, configHandler->GetInt("SimThreadCount"));
-	if (numThreads == 0) {
-		int lcpu = Threading::GetAvailableCores();
-		int pcpu = Threading::GetPhysicalCores();
-		// deduct all logical cores dedicated to the rendering/sim main threads
-		numThreads = std::max((int)GML::NumMainSimThreads(), lcpu - GML::NumMainThreads() * (int)(lcpu / pcpu) + GML::NumMainSimThreads()); // add the main sim thread
-	}
-	simNumExtraThreads = (!modInfo.multiThreadSim) ? 0 : std::max(0, numThreads - GML::NumMainSimThreads());
-	Threading::SimThreadCount(simNumExtraThreads + GML::NumMainSimThreads() + (modInfo.asyncPathFinder ? 1 : 0));
-
-	if (simNumExtraThreads > 0)
-		LOG("[Threading] Simulation multithreading is enabled with %d threads", simNumExtraThreads + GML::NumMainSimThreads());
-	else
-		LOG("[Threading] Simulation multithreading is disabled");
 
 	units.resize(maxUnits, NULL);
 	unitsByDefs.resize(teamHandler->ActiveTeams(), std::vector<CUnitSet>(unitDefHandler->unitDefs.size()));
@@ -123,13 +110,13 @@ CUnitHandler::CUnitHandler()
 
 	slowUpdateIterator = activeUnits.end();
 	airBaseHandler = new CAirBaseHandler();
-	InitThreads();
+	simThreadPool = new CSimThreadPool();
 }
 
 
 CUnitHandler::~CUnitHandler()
 {
-	CleanThreads();
+	delete simThreadPool;
 	for (std::list<CUnit*>::iterator usi = activeUnits.begin(); usi != activeUnits.end(); ++usi) {
 		// ~CUnit dereferences featureHandler which is destroyed already
 		(*usi)->delayedWreckLevel = -1;
@@ -285,9 +272,7 @@ void CUnitHandler::Update()
 		SCOPED_TIMER("Unit::MoveType::Update");
 		Threading::SetMultiThreadedSim(modInfo.multiThreadSim);
 		Threading::SetThreadedPath(modInfo.asyncPathFinder);
-		// Use the current thread as thread zero. FIRE!
-		simThreadingStage = UPDATE_MOVETYPE;
-		MoveTypeThreadFunc(0);
+		simThreadPool->Execute(&UpdateMoveTypeThreadFuncStatic);
 		Threading::SetMultiThreadedSim(false);
 
 		if (modInfo.asyncPathFinder) {
@@ -345,14 +330,10 @@ void CUnitHandler::Update()
 		SCOPED_TIMER("Unit::MoveType::SlowUpdate");
 
 		Threading::SetMultiThreadedSim(modInfo.multiThreadSim);
-		// Use the current thread as thread zero. FIRE!
-		simThreadingStage = SLOW_UPDATE_MOVETYPE;
-		MoveTypeThreadFunc(0);
+		simThreadPool->Execute(&SlowUpdateMoveTypeThreadFuncStatic, &SlowUpdateMoveTypeInitThreadFuncStatic);
 
 		Threading::SetMultiThreadedSim(false);
-		// Use the current thread as thread zero. FIRE!
-		simThreadingStage = DELAYED_SLOW_UPDATE_MOVETYPE;
-		MoveTypeThreadFunc(0);
+		simThreadPool->Execute(&DelayedSlowUpdateMoveTypeThreadFuncStatic);
 	}
 
 	{
@@ -395,138 +376,107 @@ inline void UpdateMoveType(CUnit *unit) {
 }
 
 
-void CUnitHandler::MoveTypeThreadFunc(int i) {
-	if (simNumExtraThreads > 0) {
-		if (i > 0) {
-			streflop::streflop_init<streflop::Simple>();
-			GML::ThreadNumber(GML_MAX_NUM_THREADS + i);
-			char threadName[32];
-			sprintf(threadName,"SimMT%d", i);
-			Threading::SetAffinityHelper(threadName, configHandler->GetUnsigned("SetCoreAffinitySimMT"));
+void CUnitHandler::UpdateMoveTypeThreadFunc(bool threaded) {
+	if (!threaded) {
+		for (std::list<CUnit*>::iterator usi = activeUnits.begin(); usi != activeUnits.end(); ++usi) {
+			CUnit *unit = *usi;
+			Threading::SetThreadCurrentUnitID(unit->id);
+			UpdateMoveType(unit);
 		}
-		do {
-			if (i == 0) {
-				atomicCount %= -1;
-				if (simThreadingStage == SLOW_UPDATE_MOVETYPE) {
-					memset(CUnit::updateOps, 0, sizeof(CUnit::updateOps));
-				}
-			}
-			simBarrier->wait();
-			if (stopThread)
-				break;
-			int curPos = 0;
-			if (simThreadingStage == PROJECTILE_COLLISION) {
-				ph->ProjectileCollisionThreadFunc();
-			}
-			else if (simThreadingStage == UPDATE_MOVETYPE) {
-				const int countEnd = activeUnits.size();
-				std::list<CUnit*>::iterator usi = activeUnits.begin();
-				while(true) {
-					int nextPos = ++atomicCount;
-					if (nextPos >= countEnd) break;
-					while(curPos < nextPos) { ++usi; ++curPos; }
-					CUnit *unit = *usi;
-					Threading::SetThreadCurrentUnitID(unit->id);
-					UpdateMoveType(unit);
-				}
-			} else if (simThreadingStage == SLOW_UPDATE_MOVETYPE) {
-				const int countEnd = (activeUnits.size() / UNIT_SLOWUPDATE_RATE) + 1;
-				std::list<CUnit*>::iterator sui = ((gs->frameNum & (UNIT_SLOWUPDATE_RATE - 1)) == 0) ? activeUnits.begin() : slowUpdateIterator;
+		return;
+	}
+	// (threaded)
+	int curPos = 0;
+	const int countEnd = activeUnits.size();
+	std::list<CUnit*>::iterator usi = activeUnits.begin();
+	while(true) {
+		int nextPos = simThreadPool->NextIter();
+		if (nextPos >= countEnd) break;
+		while(curPos < nextPos) { ++usi; ++curPos; }
+		CUnit *unit = *usi;
+		Threading::SetThreadCurrentUnitID(unit->id);
+		UpdateMoveType(unit);
+	}
+}
 
-				while(true) {
-					int nextPos = ++atomicCount;
-					if (nextPos >= countEnd) break;
-					while(curPos < nextPos && sui != activeUnits.end()) { ++sui; ++curPos; }
-					if (sui == activeUnits.end()) break;
+void CUnitHandler::SlowUpdateMoveTypeInitThreadFunc(bool threaded) {
+	if (!threaded)
+		return;
+	// (threaded)
+	memset(CUnit::updateOps, 0, sizeof(CUnit::updateOps));
+}
 
-					CUnit *unit = *sui;
-					Threading::SetThreadCurrentUnitID(unit->id);
-					unit->moveType->SlowUpdate();
-				}
-			} else if (simThreadingStage == DELAYED_SLOW_UPDATE_MOVETYPE) {
-				const int countEnd = 4;
-				while(true) {
-					int nextPos = ++atomicCount;
-					if (nextPos >= countEnd)
-						break;
-					switch(nextPos) {
-						case 0:
-							for (int i = 0; i < MAX_UNITS; ++i) {
-								if (CUnit::updateOps[i] & CUnit::UPDATE_LOS) {
-									units[i]->QueUpdateLOS(false);
-								}
-							}
-							break;
-						case 1:
-							for (int i = 0; i < MAX_UNITS; ++i) {
-								if (CUnit::updateOps[i] & CUnit::UPDATE_RADAR) {
-									units[i]->QueUpdateRadar(false);
-								}
-							}
-							break;
-						case 2:
-							for (int i = 0; i < MAX_UNITS; ++i) {
-								if (CUnit::updateOps[i] & CUnit::UPDATE_QUAD) {
-									units[i]->QueUpdateQuad(false);
-								}
-							}
-							break;
-						case 3:
-							for (int i = 0; i < MAX_UNITS; ++i) {
-								if (CUnit::updateOps[i] & CUnit::FIND_PAD) {
-									units[i]->QueFindPad(false);
-								}
-							}
-							break;
-						default:
-							LOG_L(L_ERROR, "Invalid slow update type");
+void CUnitHandler::SlowUpdateMoveTypeThreadFunc(bool threaded) {
+	if (!threaded) {
+		std::list<CUnit*>::iterator sui = ((gs->frameNum & (UNIT_SLOWUPDATE_RATE - 1)) == 0) ? activeUnits.begin() : slowUpdateIterator;
+		int n = (activeUnits.size() / UNIT_SLOWUPDATE_RATE) + 1;
+
+		for (; sui != activeUnits.end() && n != 0; ++sui) {
+			CUnit *unit = *sui;
+			Threading::SetThreadCurrentUnitID(unit->id);
+			unit->moveType->SlowUpdate();
+		}
+		return;
+	}
+	// (threaded)
+	int curPos = 0;
+	const int countEnd = (activeUnits.size() / UNIT_SLOWUPDATE_RATE) + 1;
+	std::list<CUnit*>::iterator sui = ((gs->frameNum & (UNIT_SLOWUPDATE_RATE - 1)) == 0) ? activeUnits.begin() : slowUpdateIterator;
+
+	while(true) {
+		int nextPos = simThreadPool->NextIter();
+		if (nextPos >= countEnd) break;
+		while(curPos < nextPos && sui != activeUnits.end()) { ++sui; ++curPos; }
+		if (sui == activeUnits.end()) break;
+
+		CUnit *unit = *sui;
+		Threading::SetThreadCurrentUnitID(unit->id);
+		unit->moveType->SlowUpdate();
+	}
+}
+
+void CUnitHandler::DelayedSlowUpdateMoveTypeThreadFunc(bool threaded) {
+	if (!threaded)
+		return; // not needed for singlethreaded sim
+	// (threaded)
+	const int countEnd = 4;
+	while(true) {
+		int nextPos = simThreadPool->NextIter();
+		if (nextPos >= countEnd)
+			break;
+		switch(nextPos) {
+			case 0:
+				for (int i = 0; i < MAX_UNITS; ++i) {
+					if (CUnit::updateOps[i] & CUnit::UPDATE_LOS) {
+						units[i]->QueUpdateLOS(false);
 					}
 				}
-			}
-			simBarrier->wait();
-		} while (i > 0);
-	}
-	else {
-		if (simThreadingStage == PROJECTILE_COLLISION) {
-			ph->ProjectileCollisionNonThreadFunc();
-		} else if (simThreadingStage == UPDATE_MOVETYPE) {
-			for (std::list<CUnit*>::iterator usi = activeUnits.begin(); usi != activeUnits.end(); ++usi) {
-				CUnit *unit = *usi;
-				Threading::SetThreadCurrentUnitID(unit->id);
-				UpdateMoveType(unit);
-			}
-		} else if (simThreadingStage == SLOW_UPDATE_MOVETYPE) {
-			std::list<CUnit*>::iterator sui = ((gs->frameNum & (UNIT_SLOWUPDATE_RATE - 1)) == 0) ? activeUnits.begin() : slowUpdateIterator;
-			int n = (activeUnits.size() / UNIT_SLOWUPDATE_RATE) + 1;
-
-			for (; sui != activeUnits.end() && n != 0; ++sui) {
-				CUnit *unit = *sui;
-				Threading::SetThreadCurrentUnitID(unit->id);
-				unit->moveType->SlowUpdate();
-			}
-		} else if (simThreadingStage == DELAYED_SLOW_UPDATE_MOVETYPE) {
-			// not needed for singlethreaded sim
+				break;
+			case 1:
+				for (int i = 0; i < MAX_UNITS; ++i) {
+					if (CUnit::updateOps[i] & CUnit::UPDATE_RADAR) {
+						units[i]->QueUpdateRadar(false);
+					}
+				}
+				break;
+			case 2:
+				for (int i = 0; i < MAX_UNITS; ++i) {
+					if (CUnit::updateOps[i] & CUnit::UPDATE_QUAD) {
+						units[i]->QueUpdateQuad(false);
+					}
+				}
+				break;
+			case 3:
+				for (int i = 0; i < MAX_UNITS; ++i) {
+					if (CUnit::updateOps[i] & CUnit::FIND_PAD) {
+						units[i]->QueFindPad(false);
+					}
+				}
+				break;
+			default:
+				LOG_L(L_ERROR, "Invalid slow update type");
 		}
 	}
-}
-
-void CUnitHandler::InitThreads() {
-	simBarrier = new boost::barrier(simNumExtraThreads + 1);
-
-	for (unsigned int i = 1; i <= simNumExtraThreads; i++) {
-		simThreads[i] = new boost::thread(boost::bind(&CUnitHandler::MoveTypeThreadFunc, this, i));
-	}
-}
-
-void CUnitHandler::CleanThreads() {
-	stopThread = true;
-	simBarrier->wait();
-	for (unsigned int i = 1; i <= simNumExtraThreads; i++) {
-		simThreads[i]->join();
-		delete simThreads[i];
-	}
-
-	delete simBarrier;
 }
 
 // find the reference height for a build-position

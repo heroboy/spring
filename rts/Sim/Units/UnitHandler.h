@@ -9,8 +9,6 @@
 #include "UnitDef.h"
 #include "UnitSet.h"
 #include "CommandAI/Command.h"
-#include <boost/thread/barrier.hpp>
-#include "lib/gml/gmlcnt.h"
 
 class CUnit;
 class CBuilderCAI;
@@ -82,9 +80,10 @@ public:
 	float maxUnitRadius;                              ///< largest radius of any unit added so far
 	bool morphUnitToFeature;
 
-	enum SimThreadingStage { PROJECTILE_COLLISION, UPDATE_MOVETYPE, SLOW_UPDATE_MOVETYPE, DELAYED_SLOW_UPDATE_MOVETYPE};
-	volatile SimThreadingStage simThreadingStage;
-	gmlCount atomicCount;
+	void UpdateMoveTypeThreadFunc(bool threaded);
+	void SlowUpdateMoveTypeInitThreadFunc(bool threaded);
+	void SlowUpdateMoveTypeThreadFunc(bool threaded);
+	void DelayedSlowUpdateMoveTypeThreadFunc(bool threaded);
 
 private:
 	///< test a single mapsquare for build possibility
@@ -98,10 +97,6 @@ private:
 	///< global unit-limit (derived from the per-team limit)
 	unsigned int maxUnits;
 
-	int simNumExtraThreads;
-	boost::barrier* simBarrier;
-	boost::thread* simThreads[GML_MAX_NUM_THREADS];
-	volatile bool stopThread;
 	unsigned short blockOps[MAX_UNITS];
 };
 
