@@ -107,7 +107,7 @@ CUnit::CUnit() : CSolidObject(),
 	lastNanoAdd(gs->frameNum),
 	repairAmount(0.0f),
 	transporter(NULL),
-	toBeTransported(false),
+	loadingTransportId(-1),
 	buildProgress(0.0f),
 	groundLevelled(true),
 	terraformLeft(0.0f),
@@ -251,6 +251,7 @@ CUnit::CUnit() : CSolidObject(),
 	stableTransporter(NULL),
 	stableStunned(false),
 	stableCommandQueEmpty(true),
+	stableLoadingTransportId(-1),
 #endif
 	stunned(false)
 {
@@ -2755,6 +2756,7 @@ void CUnit::StableSlowUpdate() {
 	stableBeingBuilt = beingBuilt;
 	stableStunned = stunned;
 	stableCommandQueEmpty = commandAI->commandQue.empty();
+	stableLoadingTransportId = loadingTransportId;
 	CSolidObject::StableSlowUpdate();
 	if (moveType)
 		moveType->StableSlowUpdate();
@@ -2778,6 +2780,7 @@ void CUnit::StableInit(bool stable) {
 		pStableTransporter = &stableTransporter;
 		pStableStunned = &stableStunned;
 		pStableCommandQueEmpty = &CUnit::CommandQueEmptyStable;
+		pStableLoadingTransportId = &stableLoadingTransportId;
 	} else {
 		pStableBlockEnemyPushing = &blockEnemyPushing;
 		pStableBeingBuilt = &beingBuilt;
@@ -2785,6 +2788,7 @@ void CUnit::StableInit(bool stable) {
 		pStableTransporter = &transporter;
 		pStableStunned = &stunned;
 		pStableCommandQueEmpty = &CUnit::CommandQueEmpty;
+		pStableLoadingTransportId = &loadingTransportId;
 	}
 	CSolidObject::StableInit(stable);
 }
@@ -2812,7 +2816,7 @@ CR_REG_METADATA(CUnit, (
 	CR_MEMBER(lastNanoAdd),
 	CR_MEMBER(repairAmount),
 	CR_MEMBER(transporter),
-	CR_MEMBER(toBeTransported),
+	CR_MEMBER(loadingTransportId),
 	CR_MEMBER(buildProgress),
 	CR_MEMBER(groundLevelled),
 	CR_MEMBER(terraformLeft),

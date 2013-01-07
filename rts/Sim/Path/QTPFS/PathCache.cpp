@@ -260,4 +260,3 @@ void QTPFS::PathCache::KillDeadPaths() {
 
 	deadPaths.clear();
 }
-

@@ -261,8 +261,8 @@ public:
 	float repairAmount;
 	/// transport that the unit is currently in
 	CTransportUnit* transporter;
-	/// unit is about to be picked up by a transport
-	bool toBeTransported;
+	/// id of transport that the unit is about to be picked up by
+	int loadingTransportId;
 	/// 0.0-1.0
 	float buildProgress;
 	/// whether the ground below this unit has been terraformed
@@ -529,6 +529,7 @@ public:
 	CTransportUnit* stableTransporter, **pStableTransporter;
 	bool stableStunned, *pStableStunned;
 	bool stableCommandQueEmpty, (CUnit::*pStableCommandQueEmpty)() const;
+	int stableLoadingTransportId, *pStableLoadingTransportId;
 	// shall return "stable" values, that do not suddenly change during a sim frame. (for multithreading purposes)
 	const bool StableBlockEnemyPushing() const { return *pStableBlockEnemyPushing; }
 	const bool StableUsingScriptMoveType() const { return usingScriptMoveType; } // appears to be MT stable by itself
@@ -537,6 +538,7 @@ public:
 	const CTransportUnit* StableTransporter() const { return *pStableTransporter; }
 	const bool StableIsStunned() const { return *pStableStunned; }
 	const bool StableCommandQueEmpty() const { return (this->*pStableCommandQueEmpty)(); }
+	const int StableLoadingTransportId() const { return *pStableLoadingTransportId; }
 
 	bool CommandQueEmptyStable() const;
 

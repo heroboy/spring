@@ -1,6 +1,5 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-
 #include "GroundMoveType.h"
 #include "ExternalAI/EngineOutHandler.h"
 #include "Game/Camera.h"
@@ -22,6 +21,7 @@
 #include "Sim/Path/IPathController.hpp"
 #include "Sim/Path/IPathManager.h"
 #include "Sim/Units/Scripts/CobInstance.h"
+#include "Sim/Units/UnitTypes/TransportUnit.h"
 #include "Sim/Units/CommandAI/CommandAI.h"
 #include "Sim/Units/CommandAI/TransportCAI.h"
 #include "Sim/Units/UnitDef.h"
@@ -57,11 +57,11 @@ LOG_REGISTER_SECTION_GLOBAL(LOG_SECTION_GMT)
 // so the assertion can be less strict
 #define ASSERT_SANE_OWNER_SPEED(v) assert(v.SqLength() < (MAX_UNIT_SPEED * MAX_UNIT_SPEED * 1e2));
 
-#define MIN_WAYPOINT_DISTANCE SQUARE_SIZE
-#define MAX_IDLING_SLOWUPDATES 16
-#define WAIT_FOR_PATH 1
-#define IGNORE_OBSTACLES 0
-#define PLAY_SOUNDS 1
+#define MIN_WAYPOINT_DISTANCE   SQUARE_SIZE
+#define MAX_IDLING_SLOWUPDATES           16
+#define IGNORE_OBSTACLES                  0
+#define WAIT_FOR_PATH                     1
+#define PLAY_SOUNDS                       1
 
 #define UNIT_CMD_QUE_SIZE(u) (u->commandAI->commandQue.size())
 #define UNIT_HAS_MOVE_CMD(u) (u->commandAI->commandQue.empty() || u->commandAI->commandQue[0].GetID() == CMD_MOVE)
@@ -1397,7 +1397,11 @@ void CGroundMoveType::Arrived()
 		owner->QueCAIGiveCommand(CMD_WAIT);
 		owner->QueCAIGiveCommand(CMD_WAIT);
 
-		if (UNIT_CMD_QUE_SIZE(owner) <= 2 && UNIT_HAS_MOVE_CMD(owner)) {
+		if (!owner->commandAI->HasMoreMoveCommands()) {
+			// NOTE:
+			//   this is probably too drastic, need another way
+			//   to make the CAI consider its goal reached that
+			//   does *NOT* change our goal-pos
 			owner->commandAI->GiveCommand(Command(CMD_STOP));
 		}
 
@@ -1468,7 +1472,9 @@ void CGroundMoveType::HandleStaticObjectCollision(
 ) {
 	// for factories, check if collidee's position is behind us (which means we are likely exiting)
 	// NOTE: allow units to move _through_ idle open factories? (pathfinder and coldet disagree now)
-	const bool exitingYardMap = (collider->frontdir.dot(separationVector) > 0.0f);
+	const bool exitingYardMap =
+		((collider->frontdir.dot(separationVector) > 0.0f) &&
+		 (collider->   speed.dot(separationVector) > 0.0f));
 	const bool insideYardMap =
 		(collider->pos.x >= (collidee->StablePos().x - ((collidee->StableXSize() >> 1) - 0) * SQUARE_SIZE)) &&
 		(collider->pos.x <= (collidee->StablePos().x + ((collidee->StableXSize() >> 1) - 0) * SQUARE_SIZE)) &&
@@ -1481,14 +1487,24 @@ void CGroundMoveType::HandleStaticObjectCollision(
 		const int xmid = (collider->pos.x + collider->speed.x) / SQUARE_SIZE;
 		const int zmid = (collider->pos.z + collider->speed.z) / SQUARE_SIZE;
 
+		const int xmin = std::min(-1, -colliderMD->xsizeh), xmax = std::max(1, colliderMD->xsizeh);
+		const int zmin = std::min(-1, -colliderMD->xsizeh), zmax = std::max(1, colliderMD->zsizeh);
+
 		float3 strafeVec;
 		float3 bounceVec;
 
+		float sqPenDistanceSum = 0.0f;
+		float sqPenDistanceCnt = 0.0f;
+
+		if (DEBUG_DRAWING_ENABLED) {
+			geometricObjects->AddLine(collider->pos + (UpVector * 25.0f), collider->pos + (UpVector * 100.0f), 3, 1, 4);
+		}
+
 		// check for blocked squares inside collider's MoveDef footprint zone
-		// interpret each square as a "collidee" with a radius of SQUARE_SIZE
+		// interpret each square as a "collidee" and sum up separation vectors
 		// NOTE: assumes the collider's footprint is still always axis-aligned
-		for (int z = -colliderMD->zsizeh; z <= colliderMD->zsizeh; z++) {
-			for (int x = -colliderMD->xsizeh; x <= colliderMD->xsizeh; x++) {
+		for (int z = zmin; z <= zmax; z++) {
+			for (int x = xmin; x <= xmax; x++) {
 				const int xabs = xmid + x;
 				const int zabs = zmid + z;
 
@@ -1498,16 +1514,33 @@ void CGroundMoveType::HandleStaticObjectCollision(
 				const float3 squarePos = float3(xabs * SQUARE_SIZE + (SQUARE_SIZE >> 1), 0.0f, zabs * SQUARE_SIZE + (SQUARE_SIZE >> 1));
 				const float3 squareVec = collider->pos - squarePos;
 
-				const float squareDist = std::min((squareVec.Length() - (colliderRadius + SQUARE_SIZE * 2.0f)), 0.0f);
-				const float squareSign = ((squarePos.dot(collider->rightdir) - (collider->pos).dot(collider->rightdir)) < 0.0f) * 2.0f - 1.0f;
+				if (squareVec.dot(collider->speed) > 0.0f)
+					continue;	
 
-				strafeVec += (collider->rightdir * squareSign * std::min(currentSpeed, std::max(0.0f, -squareDist * 0.5f)));
-				bounceVec += ((squareVec / (squareVec.Length() + 0.01f)) * std::min(currentSpeed, std::max(0.0f, -squareDist)));
+				// radius of a square is the RHS magic constant (sqrt(2*(SQUARE_SIZE>>1)*(SQUARE_SIZE>>1)))
+				const float  sqColRadiusSum = colliderRadius + 5.656854249492381f;
+				const float   sqSepDistance = squareVec.Length2D() + 0.1f;
+				const float   sqPenDistance = std::min(sqSepDistance - sqColRadiusSum, 0.0f);
+				const float  sqColSlideSign = ((squarePos.dot(collider->rightdir) - (collider->pos).dot(collider->rightdir)) < 0.0f) * 2.0f - 1.0f;
+
+				strafeVec += (collider->rightdir * sqColSlideSign);
+				bounceVec += (squareVec / sqSepDistance);
+
+				sqPenDistanceSum += sqPenDistance;
+				sqPenDistanceCnt += 1.0f;
 			}
 		}
 
-		collider->Move3D(strafeVec, true);
-		collider->Move3D(bounceVec, true);
+		if (sqPenDistanceCnt > 0.0f) {
+			strafeVec.y = 0.0f; strafeVec.SafeNormalize();
+			bounceVec.y = 0.0f; bounceVec.SafeNormalize();
+
+			const float strafeScale = std::min(currentSpeed, std::max(0.0f, -(sqPenDistanceSum / sqPenDistanceCnt) * 0.5f));
+			const float bounceScale =                        std::max(0.0f, -(sqPenDistanceSum / sqPenDistanceCnt)        );
+
+			collider->Move3D(strafeVec * strafeScale, true);
+			collider->Move3D(bounceVec * bounceScale, true);
+		}
 
 		wantRequestPath = ((strafeVec + bounceVec) != ZeroVector);
 	} else {
@@ -1516,11 +1549,14 @@ void CGroundMoveType::HandleStaticObjectCollision(
 		const float   penDistance = std::min(sepDistance - colRadiusSum, 0.0f);
 		const float  colSlideSign = ((collidee->StablePos().dot(collider->rightdir) - collider->pos.dot(collider->rightdir)) <= 0.0f) * 2.0f - 1.0f;
 
+		const float strafeScale = std::min(currentSpeed, std::max(0.0f, -penDistance * 0.5f)) * (1 -                exitingYardMap);
+		const float bounceScale =                        std::max(0.0f, -penDistance        ) * (1 - checkYardMap * exitingYardMap);
+
 		// when exiting a lab, insideYardMap goes from true to false
 		// before we stop colliding and we get a slight unneeded push
 		// --> compensate for this
-		collider->Move3D(collider->rightdir * colSlideSign * std::min(currentSpeed, std::max(0.0f, -penDistance * 0.5f)), true);
-		collider->Move3D((separationVector / sepDistance) * std::max(0.0f, -penDistance) * (1.0f - checkYardMap * exitingYardMap), true);
+		collider->Move3D((collider->rightdir * colSlideSign) * strafeScale, true);
+		collider->Move3D((separationVector / sepDistance) *  bounceScale, true);
 
 		wantRequestPath = (penDistance < 0.0f);
 	}
@@ -1558,18 +1594,8 @@ void CGroundMoveType::HandleUnitCollisions(
 	const int dirSign = int(!reversing) * 2 - 1;
 	const float3 crushImpulse = collider->speed * collider->mass * dirSign;
 
-//	CTransportCAI* transA = dynamic_cast<CTransportCAI*>(collider->commandAI);
-
 	for (std::vector<CUnit*>::const_iterator uit = nearUnits.begin(); uit != nearUnits.end(); ++uit) {
 		CUnit* collidee = const_cast<CUnit*>(*uit);
-//		CTransportCAI* transB = dynamic_cast<CTransportCAI*>(collidee->commandAI);
-
-		if (collidee == collider) continue;
-		if (collidee->moveType->StableIsSkidding()) continue;
-		if (collidee->moveType->StableIsFlying()) continue;
-		if (collidee->StableTransporter() != NULL) continue;
-	//	if (transB && transB->LoadStillValid(collider)) continue;
-	//	if (transA && transA->LoadStillValid(collidee)) continue;
 
 		const bool colliderMobile = (collider->moveDef != NULL); // always true
 		const bool collideeMobile = (collidee->moveDef != NULL); // maybe true
@@ -1582,13 +1608,28 @@ void CGroundMoveType::HandleUnitCollisions(
 		const float collideeSpeed = collidee->StableSpeed().Length();
 		const float collideeRadius = collideeMobile?
 			FOOTPRINT_RADIUS(collideeMD->xsize, collideeMD->zsize, 0.75f):
-			FOOTPRINT_RADIUS(collidee->StableXSize(), collidee->StableZSize(), 0.75f);
+			FOOTPRINT_RADIUS(collidee  ->StableXSize(), collidee  ->StableZSize(), 0.75f);
 
 		const float3 separationVector   = collider->pos - collidee->StablePos();
 		const float separationMinDistSq = (colliderRadius + collideeRadius) * (colliderRadius + collideeRadius);
 
 		if ((separationVector.SqLength() - separationMinDistSq) > 0.01f)
 			continue;
+
+		if (collidee == collider) continue;
+		if (collidee->moveType->StableIsSkidding()) continue;
+		if (collidee->moveType->StableIsFlying()) continue;
+
+		// disable collisions between collider and collidee
+		// if collidee is currently inside any transporter,
+		// or if collider is being transported by collidee
+		if (collider->GetTransporter() == collidee) continue;
+		if (collidee->StableTransporter() != NULL) continue;
+		// also disable collisions if either party currently
+		// has an order to load units (TODO: do we want this
+		// for unloading as well?)
+		if (collider->loadingTransportId == collidee->id) continue;
+		if (collidee->StableLoadingTransportId() == collider->id) continue;
 
 		// NOTE:
 		//    we exclude aircraft (which have NULL moveDef's) landed
@@ -2184,27 +2225,15 @@ float CGroundMoveType::GetGroundHeight(const float3& p) const
 
 void CGroundMoveType::AdjustPosToWaterLine()
 {
-	if (!(owner->falling || flying)) {
-		float groundHeight = GetGroundHeight(owner->pos);
+	if (owner->falling)
+		return;
+	if (flying)
+		return;
 
-		if (owner->unitDef->floatOnWater && owner->inWater && groundHeight <= 0.0f) {
-			groundHeight = -owner->unitDef->waterline;
-		}
-
-		owner->Move1D(groundHeight, 1, false);
-
-		/*
-		const UnitDef* ud = owner->unitDef;
-		const MoveDef* md = ud->moveDef;
-
-		y = CMoveMath::yLevel(*md, owner->pos.x, owner->pos.z);
-
-		if (owner->unitDef->floatOnWater && owner->inWater) {
-			y -= owner->unitDef->waterline;
-		}
-
-		owner->Move1D(y, 1, false);
-		*/
+	if (owner->unitDef->floatOnWater) {
+		owner->Move1D(std::max(ground->GetHeightReal(owner->pos.x, owner->pos.z),          -owner->unitDef->waterline), 1, false);
+	} else {
+		owner->Move1D(std::max(ground->GetHeightReal(owner->pos.x, owner->pos.z), owner->pos.y + mapInfo->map.gravity), 1, false);
 	}
 }
 
