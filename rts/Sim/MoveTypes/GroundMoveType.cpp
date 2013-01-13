@@ -57,6 +57,10 @@ LOG_REGISTER_SECTION_GLOBAL(LOG_SECTION_GMT)
 // so the assertion can be less strict
 #define ASSERT_SANE_OWNER_SPEED(v) assert(v.SqLength() < (MAX_UNIT_SPEED * MAX_UNIT_SPEED * 1e2));
 
+// magic number to reduce damage taken from collisions
+// between a very heavy and a very light CSolidObject
+#define COLLISION_DAMAGE_MULT         0.02f
+
 #define MIN_WAYPOINT_DISTANCE   SQUARE_SIZE
 #define MAX_IDLING_SLOWUPDATES           16
 #define IGNORE_OBSTACLES                  0
@@ -704,7 +708,7 @@ void CGroundMoveType::UpdateSkid()
 		const float impactSpeed = pos.IsInBounds()?
 			-speed.dot(ground->GetNormal(pos.x, pos.z)):
 			-speed.dot(UpVector);
-		const float impactDamageMult = impactSpeed * owner->mass * 0.02f;
+		const float impactDamageMult = impactSpeed * owner->mass * COLLISION_DAMAGE_MULT;
 		const bool doColliderDamage = (modInfo.allowUnitCollisionDamage && impactSpeed > ud->minCollisionSpeed && ud->minCollisionSpeed >= 0.0f);
 
 		if (groundHeight > pos.y) {
@@ -794,12 +798,9 @@ void CGroundMoveType::UpdateSkid()
 		}
 	}
 
-	// translate before rotate
+	// translate before rotate, match terrain normal if not in air
 	owner->Move3D(speed, true);
-
-	// NOTE: only needed to match terrain normal
-	if ((pos.y - groundHeight) <= 1.0f)
-		owner->UpdateDirVectors(true, true);
+	owner->UpdateDirVectors(true, true);
 
 	if (skidding) {
 		CalcSkidRot();
@@ -857,10 +858,6 @@ void CGroundMoveType::CheckCollisionSkid()
 	const std::vector<CUnit*>& nearUnits = qf->StableGetUnitsExact(pos, collider->radius);
 	const std::vector<CFeature*>& nearFeatures = qf->StableGetFeaturesExact(pos, collider->radius);
 
-	// magic number to reduce damage taken from collisions
-	// between a very heavy and a very light CSolidObject
-	static const float MASS_MULT = 0.02f;
-
 	for (std::vector<CUnit*>::const_iterator ui = nearUnits.begin(); ui != nearUnits.end(); ++ui) {
 		CUnit* collidee = *ui;
 		const UnitDef* collideeUD = collider->unitDef;
@@ -877,7 +874,7 @@ void CGroundMoveType::CheckCollisionSkid()
 
 		if (collidee->moveDef == NULL) {
 			const float impactSpeed = -collider->speed.dot(dif);
-			const float impactDamageMult = std::min(impactSpeed * collider->mass * MASS_MULT, MAX_UNIT_SPEED);
+			const float impactDamageMult = std::min(impactSpeed * collider->mass * COLLISION_DAMAGE_MULT, MAX_UNIT_SPEED);
 
 			const bool doColliderDamage = (modInfo.allowUnitCollisionDamage && impactSpeed > colliderUD->minCollisionSpeed && colliderUD->minCollisionSpeed >= 0.0f);
 			const bool doCollideeDamage = (modInfo.allowUnitCollisionDamage && impactSpeed > collideeUD->minCollisionSpeed && collideeUD->minCollisionSpeed >= 0.0f);
@@ -908,8 +905,8 @@ void CGroundMoveType::CheckCollisionSkid()
 			const float colliderRelImpactSpeed = impactSpeed * (1.0f - colliderRelMass);
 			const float collideeRelImpactSpeed = impactSpeed * (       colliderRelMass); 
 
-			const float  colliderImpactDmgMult = std::min(colliderRelImpactSpeed * collider->mass * MASS_MULT, MAX_UNIT_SPEED);
-			const float  collideeImpactDmgMult = std::min(collideeRelImpactSpeed * collider->mass * MASS_MULT, MAX_UNIT_SPEED);
+			const float  colliderImpactDmgMult = std::min(colliderRelImpactSpeed * collider->mass * COLLISION_DAMAGE_MULT, MAX_UNIT_SPEED);
+			const float  collideeImpactDmgMult = std::min(collideeRelImpactSpeed * collider->mass * COLLISION_DAMAGE_MULT, MAX_UNIT_SPEED);
 			const float3 colliderImpactImpulse = dif * colliderRelImpactSpeed;
 			const float3 collideeImpactImpulse = dif * collideeRelImpactSpeed;
 
@@ -950,7 +947,7 @@ void CGroundMoveType::CheckCollisionSkid()
 
 		const float3 dif = (pos - f->StablePos()).SafeNormalize();
 		const float impactSpeed = -collider->speed.dot(dif);
-		const float impactDamageMult = std::min(impactSpeed * collider->mass * MASS_MULT, MAX_UNIT_SPEED);
+		const float impactDamageMult = std::min(impactSpeed * collider->mass * COLLISION_DAMAGE_MULT, MAX_UNIT_SPEED);
 		const float3 impactImpulse = dif * impactSpeed;
 		const bool doColliderDamage = (modInfo.allowUnitCollisionDamage && impactSpeed > colliderUD->minCollisionSpeed && colliderUD->minCollisionSpeed >= 0.0f);
 
