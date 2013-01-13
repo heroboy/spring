@@ -2598,7 +2598,9 @@ void CUnit::QueAddImpulse(CSolidObject *o, float massScale, bool delay) {
 		delayOps.push_back(DelayOp(ADD_UNIT_IMPULSE, massScale, o));
 	} else {
 		CUnit* u = static_cast<CUnit *>(o);
-		u->AddImpulse((u->moveType->oldPos - u->pos) * massScale);
+		if (!u->moveType->IsSkidding() && !u->moveType->IsFlying()) {
+			u->AddImpulse((u->moveType->oldPos - u->pos) * massScale);
+		}
 	}
 }
 
