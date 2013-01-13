@@ -2341,6 +2341,22 @@ void CUnit::QueCAIGiveCommand(int cmd, bool delay) {
 		commandAI->GiveCommand(Command(cmd));
 	}
 }
+void CUnit::QueCAIWaitStop(bool delay) {
+	if (delay) {
+		ASSERT_THREAD_OWNS_UNIT();
+		delayOps.push_back(DelayOp(CAI_WAITSTOP));
+	} else {
+		commandAI->GiveCommand(Command(CMD_WAIT));
+		commandAI->GiveCommand(Command(CMD_WAIT));
+		if (!commandAI->HasMoreMoveCommands()) {
+			// NOTE:
+			//   this is probably too drastic, need another way
+			//   to make the CAI consider its goal reached that
+			//   does *NOT* change our goal-pos
+			commandAI->GiveCommand(Command(CMD_STOP));
+		}
+	}
+}
 void CUnit::QueFail(bool delay) {
 	if (delay) {
 		ASSERT_THREAD_OWNS_UNIT();
@@ -2653,6 +2669,9 @@ int CUnit::ExecuteDelayOps() {
 				break;
 			case CAI_GIVECOMMAND:
 				QueCAIGiveCommand(d.data, false);
+				break;
+			case CAI_WAITSTOP:
+				QueCAIWaitStop(false);
 				break;
 			case FAIL:
 				QueFail(false);

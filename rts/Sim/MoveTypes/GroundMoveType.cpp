@@ -1394,16 +1394,8 @@ void CGroundMoveType::Arrived()
 		//   (probably whenever we are called "before" the CAI
 		//   is ready to accept that a unit is at its goal-pos)
 		// owner->commandAI->SlowUpdate();
-		owner->QueCAIGiveCommand(CMD_WAIT);
-		owner->QueCAIGiveCommand(CMD_WAIT);
 
-		if (!owner->commandAI->HasMoreMoveCommands()) {
-			// NOTE:
-			//   this is probably too drastic, need another way
-			//   to make the CAI consider its goal reached that
-			//   does *NOT* change our goal-pos
-			owner->commandAI->GiveCommand(Command(CMD_STOP));
-		}
+		owner->QueCAIWaitStop();
 
 		LOG_L(L_DEBUG, "Arrived: unit %i arrived", owner->id);
 	}
