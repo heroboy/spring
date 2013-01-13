@@ -12,10 +12,10 @@ else
 fi
 
 echo "building in ${BUILDDIR}"
-echo "configuring ${SOURCEDIR} with $@ ..."
+echo "configuring ${SOURCEDIR} with ${CMAKEPARAM} $@ ..."
 
 cd ${BUILDDIR}
-cmake ${SOURCEDIR} $@
+cmake ${CMAKEPARAM} $@ ${SOURCEDIR}
 
 echo "erasing old base content..."
 rm -rf base

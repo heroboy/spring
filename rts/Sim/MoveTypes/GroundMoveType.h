@@ -98,6 +98,7 @@ private:
 	void CheckCollisionSkid();
 	void CalcSkidRot();
 
+	const float3& GetGroundNormal(const float3&) const;
 	float GetGroundHeight(const float3&) const;
 	void AdjustPosToWaterLine();
 	bool UpdateDirectControl();

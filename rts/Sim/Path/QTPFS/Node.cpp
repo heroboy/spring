@@ -88,8 +88,8 @@ unsigned int QTPFS::INode::GetRectangleRelation(const PathRectangle& r) const {
 	return REL_NODE_OVERLAPS_RECT;
 }
 
-float3 QTPFS::INode::GetNeighborEdgeTransitionPoint(const INode* ngb, const float3& pos) const {
-	float3 p = ZeroVector;
+float3 QTPFS::INode::GetNeighborEdgeTransitionPoint(const INode* ngb, const float3& pos, float alpha) const {
+	float3 p;
 
 	const unsigned int
 		minx = std::max(xmin(), ngb->xmin()),
@@ -107,20 +107,21 @@ float3 QTPFS::INode::GetNeighborEdgeTransitionPoint(const INode* ngb, const floa
 	//     with xsize and/or zsize equal to 1 heightmap square
 	#ifndef QTPFS_ORTHOPROJECTED_EDGE_TRANSITIONS
 	const float
-		midx = (maxx + minx) * 0.5f,
-		midz = (maxz + minz) * 0.5f;
+		midx = minx * (1.0f - alpha) + maxx * (0.0f + alpha),
+		midz = minz * (1.0f - alpha) + maxz * (0.0f + alpha);
 	#endif
 
 	switch (GetNeighborRelation(ngb)) {
-		#ifdef QTPFS_ORTHOPROJECTED_EDGE_TRANSITIONS
-		#define CAST static_cast<unsigned int>
-
 		// the (int) stuff due to some MSVC weirdness
 		// corners
 		case (int)REL_NGB_EDGE_T | REL_NGB_EDGE_L: { p.x = xmin() * SQUARE_SIZE; p.z = zmin() * SQUARE_SIZE; } break;
 		case (int)REL_NGB_EDGE_T | REL_NGB_EDGE_R: { p.x = xmax() * SQUARE_SIZE; p.z = zmin() * SQUARE_SIZE; } break;
 		case (int)REL_NGB_EDGE_B | REL_NGB_EDGE_R: { p.x = xmax() * SQUARE_SIZE; p.z = zmax() * SQUARE_SIZE; } break;
 		case (int)REL_NGB_EDGE_B | REL_NGB_EDGE_L: { p.x = xmin() * SQUARE_SIZE; p.z = zmax() * SQUARE_SIZE; } break;
+
+		#ifdef QTPFS_ORTHOPROJECTED_EDGE_TRANSITIONS
+		#define CAST static_cast<unsigned int>
+
 		// edges
 		// clamp <pos> (assumed to be inside <this>) to
 		// the shared-edge bounds and ortho-project it
@@ -135,12 +136,6 @@ float3 QTPFS::INode::GetNeighborEdgeTransitionPoint(const INode* ngb, const floa
 		#undef CAST
 		#else
 
-		// the (int) stuff due to some MSVC weirdness
-		// corners
-		case (int)REL_NGB_EDGE_T | REL_NGB_EDGE_L: { p.x = xmin() * SQUARE_SIZE; p.z = zmin() * SQUARE_SIZE; } break;
-		case (int)REL_NGB_EDGE_T | REL_NGB_EDGE_R: { p.x = xmax() * SQUARE_SIZE; p.z = zmin() * SQUARE_SIZE; } break;
-		case (int)REL_NGB_EDGE_B | REL_NGB_EDGE_R: { p.x = xmax() * SQUARE_SIZE; p.z = zmax() * SQUARE_SIZE; } break;
-		case (int)REL_NGB_EDGE_B | REL_NGB_EDGE_L: { p.x = xmin() * SQUARE_SIZE; p.z = zmax() * SQUARE_SIZE; } break;
 		// edges
 		case REL_NGB_EDGE_T:                  { p.x = midx   * SQUARE_SIZE; p.z = zmin() * SQUARE_SIZE; } break;
 		case REL_NGB_EDGE_R:                  { p.x = xmax() * SQUARE_SIZE; p.z = midz   * SQUARE_SIZE; } break;
@@ -246,10 +241,7 @@ boost::uint64_t QTPFS::QTNode::GetMemFootPrint() const {
 	if (IsLeaf()) {
 		memFootPrint += (neighbors.size() * sizeof(INode*));
 		memFootPrint += (children.size() * sizeof(QTNode*));
-
-		#ifdef QTPFS_CACHED_EDGE_TRANSITION_POINTS
 		memFootPrint += (netpoints.size() * sizeof(float3));
-		#endif
 	} else {
 		for (unsigned int i = 0; i < CHILD_COUNT; i++) {
 			memFootPrint += (children[i]->GetMemFootPrint());
@@ -334,9 +326,7 @@ bool QTPFS::QTNode::Split(NodeLayer& nl, bool forced) {
 		return false;
 
 	neighbors.clear();
-	#ifdef QTPFS_CACHED_EDGE_TRANSITION_POINTS
 	netpoints.clear();
-	#endif
 
 	// can only split leaf-nodes (ie. nodes with NULL-children)
 	assert(children[NODE_IDX_TL] == NULL);
@@ -737,10 +727,11 @@ bool QTPFS::QTNode::UpdateNeighborCache(const std::vector<INode*>& nodes) {
 			neighbors.clear();
 			neighbors.reserve(maxNgbs + 4);
 
-			#ifdef QTPFS_CACHED_EDGE_TRANSITION_POINTS
 			netpoints.clear();
-			netpoints.reserve(maxNgbs + 4);
-			#endif
+			netpoints.reserve(1 + maxNgbs * QTPFS_MAX_NETPOINTS_PER_NODE_EDGE + 4);
+			// NOTE: caching ETP's breaks QTPFS_ORTHOPROJECTED_EDGE_TRANSITIONS
+			// NOTE: [0] is a reserved index and must always be valid
+			netpoints.push_back(float3());
 
 			INode* ngb = NULL;
 
@@ -753,9 +744,10 @@ bool QTPFS::QTNode::UpdateNeighborCache(const std::vector<INode*>& nodes) {
 					hmz = ngb->zmax();
 
 					neighbors.push_back(ngb);
-					#ifdef QTPFS_CACHED_EDGE_TRANSITION_POINTS
-					netpoints.push_back(INode::GetNeighborEdgeTransitionPoint(ngb, ZeroVector));
-					#endif
+
+					for (unsigned int i = 0; i < QTPFS_MAX_NETPOINTS_PER_NODE_EDGE; i++) {
+						netpoints.push_back(INode::GetNeighborEdgeTransitionPoint(ngb, float3(), QTPFS_NETPOINT_EDGE_SPACING_SCALE * (i + 1)));
+					}
 				}
 
 				ngbRels |= REL_NGB_EDGE_L;
@@ -769,9 +761,10 @@ bool QTPFS::QTNode::UpdateNeighborCache(const std::vector<INode*>& nodes) {
 					hmz = ngb->zmax();
 
 					neighbors.push_back(ngb);
-					#ifdef QTPFS_CACHED_EDGE_TRANSITION_POINTS
-					netpoints.push_back(INode::GetNeighborEdgeTransitionPoint(ngb, ZeroVector));
-					#endif
+
+					for (unsigned int i = 0; i < QTPFS_MAX_NETPOINTS_PER_NODE_EDGE; i++) {
+						netpoints.push_back(INode::GetNeighborEdgeTransitionPoint(ngb, float3(), QTPFS_NETPOINT_EDGE_SPACING_SCALE * (i + 1)));
+					}
 				}
 
 				ngbRels |= REL_NGB_EDGE_R;
@@ -786,9 +779,10 @@ bool QTPFS::QTNode::UpdateNeighborCache(const std::vector<INode*>& nodes) {
 					hmx = ngb->xmax();
 
 					neighbors.push_back(ngb);
-					#ifdef QTPFS_CACHED_EDGE_TRANSITION_POINTS
-					netpoints.push_back(INode::GetNeighborEdgeTransitionPoint(ngb, ZeroVector));
-					#endif
+
+					for (unsigned int i = 0; i < QTPFS_MAX_NETPOINTS_PER_NODE_EDGE; i++) {
+						netpoints.push_back(INode::GetNeighborEdgeTransitionPoint(ngb, float3(), QTPFS_NETPOINT_EDGE_SPACING_SCALE * (i + 1)));
+					}
 				}
 
 				ngbRels |= REL_NGB_EDGE_T;
@@ -802,9 +796,10 @@ bool QTPFS::QTNode::UpdateNeighborCache(const std::vector<INode*>& nodes) {
 					hmx = ngb->xmax();
 
 					neighbors.push_back(ngb);
-					#ifdef QTPFS_CACHED_EDGE_TRANSITION_POINTS
-					netpoints.push_back(INode::GetNeighborEdgeTransitionPoint(ngb, ZeroVector));
-					#endif
+
+					for (unsigned int i = 0; i < QTPFS_MAX_NETPOINTS_PER_NODE_EDGE; i++) {
+						netpoints.push_back(INode::GetNeighborEdgeTransitionPoint(ngb, float3(), QTPFS_NETPOINT_EDGE_SPACING_SCALE * (i + 1)));
+					}
 				}
 
 				ngbRels |= REL_NGB_EDGE_B;
@@ -820,11 +815,12 @@ bool QTPFS::QTNode::UpdateNeighborCache(const std::vector<INode*>& nodes) {
 
 					// VERT_TL ngb must be distinct from EDGE_L and EDGE_T ngbs
 					if (ngbC != ngbL && ngbC != ngbT) {
-						if (ngbL->IsOpen() && ngbT->IsOpen()) {
+						if (ngbL->AllSquaresAccessible() && ngbT->AllSquaresAccessible()) {
 							neighbors.push_back(ngbC);
-							#ifdef QTPFS_CACHED_EDGE_TRANSITION_POINTS
-							netpoints.push_back(INode::GetNeighborEdgeTransitionPoint(ngbC, ZeroVector));
-							#endif
+
+							for (unsigned int i = 0; i < QTPFS_MAX_NETPOINTS_PER_NODE_EDGE; i++) {
+								netpoints.push_back(INode::GetNeighborEdgeTransitionPoint(ngbC, float3(), QTPFS_NETPOINT_EDGE_SPACING_SCALE * (i + 1)));
+							}
 						}
 					}
 				}
@@ -835,11 +831,12 @@ bool QTPFS::QTNode::UpdateNeighborCache(const std::vector<INode*>& nodes) {
 
 					// VERT_BL ngb must be distinct from EDGE_L and EDGE_B ngbs
 					if (ngbC != ngbL && ngbC != ngbB) {
-						if (ngbL->IsOpen() && ngbB->IsOpen()) {
+						if (ngbL->AllSquaresAccessible() && ngbB->AllSquaresAccessible()) {
 							neighbors.push_back(ngbC);
-							#ifdef QTPFS_CACHED_EDGE_TRANSITION_POINTS
-							netpoints.push_back(INode::GetNeighborEdgeTransitionPoint(ngbC, ZeroVector));
-							#endif
+
+							for (unsigned int i = 0; i < QTPFS_MAX_NETPOINTS_PER_NODE_EDGE; i++) {
+								netpoints.push_back(INode::GetNeighborEdgeTransitionPoint(ngbC, float3(), QTPFS_NETPOINT_EDGE_SPACING_SCALE * (i + 1)));
+							}
 						}
 					}
 				}
@@ -854,11 +851,12 @@ bool QTPFS::QTNode::UpdateNeighborCache(const std::vector<INode*>& nodes) {
 
 					// VERT_TR ngb must be distinct from EDGE_R and EDGE_T ngbs
 					if (ngbC != ngbR && ngbC != ngbT) {
-						if (ngbR->IsOpen() && ngbT->IsOpen()) {
+						if (ngbR->AllSquaresAccessible() && ngbT->AllSquaresAccessible()) {
 							neighbors.push_back(ngbC);
-							#ifdef QTPFS_CACHED_EDGE_TRANSITION_POINTS
-							netpoints.push_back(INode::GetNeighborEdgeTransitionPoint(ngbC, ZeroVector));
-							#endif
+
+							for (unsigned int i = 0; i < QTPFS_MAX_NETPOINTS_PER_NODE_EDGE; i++) {
+								netpoints.push_back(INode::GetNeighborEdgeTransitionPoint(ngbC, float3(), QTPFS_NETPOINT_EDGE_SPACING_SCALE * (i + 1)));
+							}
 						}
 					}
 				}
@@ -869,11 +867,12 @@ bool QTPFS::QTNode::UpdateNeighborCache(const std::vector<INode*>& nodes) {
 
 					// VERT_BR ngb must be distinct from EDGE_R and EDGE_B ngbs
 					if (ngbC != ngbR && ngbC != ngbB) {
-						if (ngbR->IsOpen() && ngbB->IsOpen()) {
+						if (ngbR->AllSquaresAccessible() && ngbB->AllSquaresAccessible()) {
 							neighbors.push_back(ngbC);
-							#ifdef QTPFS_CACHED_EDGE_TRANSITION_POINTS
-							netpoints.push_back(INode::GetNeighborEdgeTransitionPoint(ngbC, ZeroVector));
-							#endif
+
+							for (unsigned int i = 0; i < QTPFS_MAX_NETPOINTS_PER_NODE_EDGE; i++) {
+								netpoints.push_back(INode::GetNeighborEdgeTransitionPoint(ngbC, float3(), QTPFS_NETPOINT_EDGE_SPACING_SCALE * (i + 1)));
+							}
 						}
 					}
 				}
@@ -883,9 +882,7 @@ bool QTPFS::QTNode::UpdateNeighborCache(const std::vector<INode*>& nodes) {
 			// NOTE: gcc 4.7 should FINALLY define __cplusplus properly (and accept -std=c++11)
 			#if (__cplusplus >= 201103L)
 			// neighbors.shrink_to_fit();
-			#ifdef QTPFS_CACHED_EDGE_TRANSITION_POINTS
 			// netpoints.shrink_to_fit();
-			#endif
 			#endif
 		}
 

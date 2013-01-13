@@ -139,6 +139,7 @@ static bool MultisampleVerify()
 }
 
 
+#ifdef _OPENMP
 static boost::uint32_t GetOpenMPCpuCore(int index, boost::uint32_t availCores, boost::uint32_t avoidCores)
 {
 	boost::uint32_t ompCore = 1;
@@ -172,6 +173,7 @@ static boost::uint32_t GetOpenMPCpuCore(int index, boost::uint32_t availCores, b
 
 	return ompCore;
 }
+#endif
 
 
 

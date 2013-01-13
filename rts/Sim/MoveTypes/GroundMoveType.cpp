@@ -23,7 +23,7 @@
 #include "Sim/Units/Scripts/CobInstance.h"
 #include "Sim/Units/UnitTypes/TransportUnit.h"
 #include "Sim/Units/CommandAI/CommandAI.h"
-#include "Sim/Units/CommandAI/TransportCAI.h"
+#include "Sim/Units/CommandAI/MobileCAI.h"
 #include "Sim/Units/UnitDef.h"
 #include "Sim/Units/UnitHandler.h"
 #include "Sim/Weapons/WeaponDefHandler.h"
@@ -622,7 +622,7 @@ void CGroundMoveType::ChangeHeading(short newHeading) {
 
 	owner->heading += pathController->GetDeltaHeading(pathId, (wantedHeading = newHeading), owner->heading, turnRate);
 
-	owner->UpdateDirVectors(!owner->upright && maxSpeed > 0.0f);
+	owner->UpdateDirVectors(!owner->upright && maxSpeed > 0.0f, true);
 	owner->UpdateMidAndAimPos();
 
 	flatFrontDir = owner->frontdir;
@@ -798,8 +798,8 @@ void CGroundMoveType::UpdateSkid()
 	owner->Move3D(speed, true);
 
 	// NOTE: only needed to match terrain normal
-	if ((pos.y - groundHeight) <= SQUARE_SIZE)
-		owner->UpdateDirVectors(true);
+	if ((pos.y - groundHeight) <= 1.0f)
+		owner->UpdateDirVectors(true, true);
 
 	if (skidding) {
 		CalcSkidRot();
@@ -1393,8 +1393,6 @@ void CGroundMoveType::Arrived()
 		//   CAI sometimes does not update its queue correctly
 		//   (probably whenever we are called "before" the CAI
 		//   is ready to accept that a unit is at its goal-pos)
-		// owner->commandAI->SlowUpdate();
-
 		owner->QueCAIWaitStop();
 
 		LOG_L(L_DEBUG, "Arrived: unit %i arrived", owner->id);
@@ -1484,9 +1482,10 @@ void CGroundMoveType::HandleStaticObjectCollision(
 
 		float3 strafeVec;
 		float3 bounceVec;
+		float3 sqCenterPosition;
 
 		float sqPenDistanceSum = 0.0f;
-		float sqPenDistanceCnt = 0.0f;
+		float sqPenDistanceCtr = 0.0f;
 
 		if (DEBUG_DRAWING_ENABLED) {
 			geometricObjects->AddLine(collider->pos + (UpVector * 25.0f), collider->pos + (UpVector * 100.0f), 3, 1, 4);
@@ -1513,22 +1512,29 @@ void CGroundMoveType::HandleStaticObjectCollision(
 				const float  sqColRadiusSum = colliderRadius + 5.656854249492381f;
 				const float   sqSepDistance = squareVec.Length2D() + 0.1f;
 				const float   sqPenDistance = std::min(sqSepDistance - sqColRadiusSum, 0.0f);
-				const float  sqColSlideSign = ((squarePos.dot(collider->rightdir) - (collider->pos).dot(collider->rightdir)) < 0.0f) * 2.0f - 1.0f;
+				// const float  sqColSlideSign = ((squarePos.dot(collider->rightdir) - (collider->pos).dot(collider->rightdir)) < 0.0f) * 2.0f - 1.0f;
 
-				strafeVec += (collider->rightdir * sqColSlideSign);
+				// this tends to cancel out too much on average
+				// strafeVec += (collider->rightdir * sqColSlideSign);
 				bounceVec += (squareVec / sqSepDistance);
 
 				sqPenDistanceSum += sqPenDistance;
-				sqPenDistanceCnt += 1.0f;
+				sqPenDistanceCtr += 1.0f;
+				sqCenterPosition += squarePos;
 			}
 		}
 
-		if (sqPenDistanceCnt > 0.0f) {
+		if (sqPenDistanceCtr > 0.0f) {
+			sqCenterPosition /= sqPenDistanceCtr;
+			sqPenDistanceSum /= sqPenDistanceCtr;
+
+			const float strafeSign = ((sqCenterPosition.dot(collider->rightdir) - (collider->pos).dot(collider->rightdir)) < 0.0f) * 2.0f - 1.0f;
+			const float strafeScale = std::min(currentSpeed, std::max(0.0f, -sqPenDistanceSum * 0.5f));
+			const float bounceScale =                        std::max(0.0f, -sqPenDistanceSum        );
+
+			strafeVec = collider->rightdir * strafeSign;
 			strafeVec.y = 0.0f; strafeVec.SafeNormalize();
 			bounceVec.y = 0.0f; bounceVec.SafeNormalize();
-
-			const float strafeScale = std::min(currentSpeed, std::max(0.0f, -(sqPenDistanceSum / sqPenDistanceCnt) * 0.5f));
-			const float bounceScale =                        std::max(0.0f, -(sqPenDistanceSum / sqPenDistanceCnt)        );
 
 			collider->Move3D(strafeVec * strafeScale, true);
 			collider->Move3D(bounceVec * bounceScale, true);
@@ -2200,13 +2206,24 @@ bool CGroundMoveType::OnSlope(float minSlideTolerance) {
 
 
 
+const float3& CGroundMoveType::GetGroundNormal(const float3& p) const
+{
+	if (owner->inWater && owner->unitDef->floatOnWater) {
+		// return (ground->GetNormalAboveWater(p));
+		return UpVector;
+	}
+
+	return (ground->GetNormal(p.x, p.z));
+}
+
 float CGroundMoveType::GetGroundHeight(const float3& p) const
 {
 	float h = 0.0f;
 
 	if (owner->unitDef->floatOnWater) {
 		// in [0, maxHeight]
-		h = ground->GetHeightAboveWater(p.x, p.z);
+		h += ground->GetHeightAboveWater(p.x, p.z);
+		h -= (owner->unitDef->waterline * (h <= 0.0f));
 	} else {
 		// in [minHeight, maxHeight]
 		h = ground->GetHeightReal(p.x, p.z);
@@ -2222,10 +2239,14 @@ void CGroundMoveType::AdjustPosToWaterLine()
 	if (flying)
 		return;
 
-	if (owner->unitDef->floatOnWater) {
-		owner->Move1D(std::max(ground->GetHeightReal(owner->pos.x, owner->pos.z),          -owner->unitDef->waterline), 1, false);
+	if (modInfo.allowGroundUnitGravity) {
+		if (owner->unitDef->floatOnWater) {
+			owner->Move1D(std::max(ground->GetHeightReal(owner->pos.x, owner->pos.z), -owner->unitDef->waterline), 1, false);
+		} else {
+			owner->Move1D(std::max(ground->GetHeightReal(owner->pos.x, owner->pos.z),               owner->pos.y), 1, false);
+		}
 	} else {
-		owner->Move1D(std::max(ground->GetHeightReal(owner->pos.x, owner->pos.z), owner->pos.y + mapInfo->map.gravity), 1, false);
+		owner->Move1D(GetGroundHeight(owner->pos), 1, false);
 	}
 }
 
@@ -2272,26 +2293,49 @@ bool CGroundMoveType::UpdateDirectControl()
 void CGroundMoveType::UpdateOwnerPos(bool wantReverse)
 {
 	if (wantedSpeed > 0.0f || currentSpeed != 0.0f) {
-		if (wantReverse) {
-			if (!reversing) {
-				reversing = (currentSpeed <= accRate);
-			}
-		} else {
-			if (reversing) {
-				reversing = (currentSpeed > accRate);
-			}
-		}
-
 		const UnitDef* ud = owner->unitDef;
 		const MoveDef* md = ud->moveDef;
 
-		const int    speedSign = int(!reversing) * 2 - 1;
-		// LuaSyncedCtrl::SetUnitVelocity directly assigns
-		// to owner->speed which gets overridden below, so
-		// need to calculate speedScale from it directly
-		// const float  speedScale = currentSpeed + deltaSpeed;
-		const float  speedScale = owner->speed.Length() + deltaSpeed;
-		const float3 speedVector = owner->frontdir * speedScale * speedSign;
+		float3 speedVector;
+
+		if (modInfo.allowGroundUnitGravity) {
+			#define hAcc deltaSpeed
+			#define vAcc mapInfo->map.gravity
+
+			const bool g = ((owner->pos.y + owner->speed.y) >= GetGroundHeight(owner->pos + owner->speed));
+
+			// use terrain-tangent vector because it does not
+			// depend on UnitDef::upright (unlike o->frontdir)
+			const float3& gndNormVec = GetGroundNormal(owner->pos);
+			const float3  gndTangVec = gndNormVec.cross(owner->rightdir);
+
+			// never drop below terrain
+			owner->speed.y =
+				(               owner->speed.dot(  UpVector) * (    g)) +
+				(gndTangVec.y * owner->speed.dot(gndTangVec) * (1 - g));
+
+			// NOTE: new speed-vector has to be parallel to frontdir
+			const float3 accelVec =
+				(gndTangVec * hAcc) +
+				(  UpVector * vAcc);
+			const float3 speedVec = owner->speed + accelVec;
+
+			speedVector =
+				(flatFrontDir * speedVec.dot(flatFrontDir)) +
+				(    UpVector * speedVec.dot(    UpVector));
+
+			#undef vAcc
+			#undef hAcc
+		} else {
+			// LuaSyncedCtrl::SetUnitVelocity directly assigns
+			// to owner->speed which gets overridden below, so
+			// need to calculate hSpeedScale from it (not from
+			// currentSpeed) directly
+			const int    speedSign  = int(!reversing) * 2 - 1;
+			const float  speedScale = owner->speed.Length() * speedSign + deltaSpeed;
+
+			speedVector = owner->frontdir * speedScale;
+		}
 
 		// NOTE: don't check for structure blockage, coldet handles that
 		//
@@ -2307,24 +2351,23 @@ void CGroundMoveType::UpdateOwnerPos(bool wantReverse)
 			(CMoveMath::GetPosSpeedMod(*md, owner->pos + speedVector              ) <= 0.01f);
 		const bool terrainIgnored = pathController->IgnoreTerrain(*md, owner->pos + speedVector);
 
-		if (terrainBlocked && !terrainIgnored) {
+		if (terrainBlocked && !terrainIgnored && !owner->inAir) {
 			// never move onto an impassable square (units
 			// can still tunnel across them at high enough
-			// speeds however)
-			owner->speed = ZeroVector;
+			// speeds however), unless not on ground (this
+			// can only happen going downhill) or we would
+			// stop in mid-air
+			owner->Move3D(owner->speed = ZeroVector, true);
 		} else {
 			// use the simplest possible Euler integration
 			owner->Move3D(owner->speed = speedVector, true);
 		}
 
-		currentSpeed = (owner->speed != ZeroVector)? speedScale: 0.0f;
-		deltaSpeed = 0.0f;
+		reversing    = (speedVector.dot(flatFrontDir) < 0.0f);
+		currentSpeed = math::fabs(speedVector.dot(flatFrontDir));
+		deltaSpeed   = 0.0f;
 
 		assert(math::fabs(currentSpeed) < 1e6f);
-	}
-
-	if (!wantReverse && currentSpeed == 0.0f) {
-		reversing = false;
 	}
 }
 

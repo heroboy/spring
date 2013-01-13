@@ -2,7 +2,6 @@
 
 #include "lib/gml/gml_base.h"
 #include "Threading.h"
-#include "System/myMath.h"
 #include "System/Config/ConfigHandler.h"
 #include "System/Log/ILog.h"
 #include "System/Platform/CrashHandler.h"

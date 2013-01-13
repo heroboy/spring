@@ -145,7 +145,7 @@ public:
 	void UpdateTerrainType();
 
 	void SetDirVectors(const CMatrix44f&);
-	void UpdateDirVectors(bool);
+	void UpdateDirVectors(bool, bool = false);
 
 	bool IsNeutral() const { return neutral; }
 	bool IsCloaked() const { return isCloaked; }

@@ -621,8 +621,11 @@ void CUnit::SetDirVectors(const CMatrix44f& matrix) {
 }
 
 // NOTE: movetypes call this directly
-void CUnit::UpdateDirVectors(bool useGroundNormal)
+void CUnit::UpdateDirVectors(bool useGroundNormal, bool isGroundUnit)
 {
+	if (isGroundUnit && inAir)
+		return;
+
 	updir    = useGroundNormal? ground->GetSmoothNormal(pos.x, pos.z): UpVector;
 	frontdir = GetVectorFromHeading(heading);
 	rightdir = (frontdir.cross(updir)).Normalize();
@@ -2349,11 +2352,10 @@ void CUnit::QueCAIWaitStop(bool delay) {
 		commandAI->GiveCommand(Command(CMD_WAIT));
 		commandAI->GiveCommand(Command(CMD_WAIT));
 		if (!commandAI->HasMoreMoveCommands()) {
-			// NOTE:
-			//   this is probably too drastic, need another way
-			//   to make the CAI consider its goal reached that
-			//   does *NOT* change our goal-pos
-			commandAI->GiveCommand(Command(CMD_STOP));
+			// update the position-parameter of our queue's front CMD_MOVE
+			// this is needed in case we Arrive()'ed non-directly (through
+			// colliding with another unit that happened to share our goal)
+			static_cast<CMobileCAI*>(commandAI)->SetFrontMoveCommandPos(pos);
 		}
 	}
 }

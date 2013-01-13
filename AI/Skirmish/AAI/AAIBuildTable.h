@@ -249,8 +249,6 @@ public:
 	// start units of each side (e.g. commander)
 	vector<int> startUnits;
 
-	// number of unit definitions
-	int numOfUnits;
 
 	vector<float> combat_eff;
 
@@ -268,7 +266,8 @@ public:
 	// all assault unit categories
 	list<UnitCategory> assault_categories;
 
-	const UnitDef& GetUnitDef(int i);
+	const UnitDef& GetUnitDef(int i) { assert(IsValidUnitDefID(i));	return *unitList[i];}
+	bool IsValidUnitDefID(int i) { return (i>=0) && (i<=unitList.size()); }
 private:
 	// for internal use
 	void CalcBuildTree(int unit);
@@ -280,7 +279,6 @@ private:
 
 	FILE *file;
 
-	// all the unit defs
-	static const UnitDef **unitList;
-
+	// all the unit defs, FIXME: this can't be made static as spring seems to free the memory returned by GetUnitDefList()
+	std::vector<const UnitDef*> unitList;
 };
