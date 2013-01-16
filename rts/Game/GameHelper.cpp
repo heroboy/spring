@@ -541,7 +541,7 @@ namespace {
 
 		public:
 			ClosestUnit_InLos(const float3& pos, float searchRadius, bool canBeBlind) :
-				Base(pos, searchRadius + uh->maxUnitRadius),
+				Base(pos, searchRadius + uh->MaxUnitRadius()),
 				closeDist(searchRadius), closeUnit(NULL), canBeBlind(canBeBlind) {}
 
 			void AddUnit(CUnit* u) {
@@ -822,7 +822,7 @@ float3 CGameHelper::GetUnitErrorPos(const CUnit* unit, int allyteam, bool aiming
 		// ^ it's one of our own, or it's in LOS, so don't add an error ^
 		return pos;
 	}
-	if (gameSetup->ghostedBuildings && (unit->losStatus[allyteam] & LOS_PREVLOS) && !unit->moveDef) {
+	if (gameSetup->ghostedBuildings && (unit->losStatus[allyteam] & LOS_PREVLOS) && unit->unitDef->IsBuildingUnit()) {
 		// ^ this is a ghosted building, so don't add an error ^
 		return pos;
 	}

@@ -4,7 +4,6 @@
 #define SOLID_OBJECT_H
 
 #include "WorldObject.h"
-#include "Sim/MoveTypes/MoveDefHandler.h"
 #include "System/Vec2.h"
 #include "System/Misc/BitwiseEnum.h"
 #include "System/Platform/Threading.h"
@@ -13,9 +12,9 @@
 #include <deque>
 
 
+struct MoveDef;
 struct CollisionVolume;
 struct SolidObjectDef;
-struct MoveDef;
 struct SolidObjectGroundDecal;
 
 struct DamageArray;
@@ -247,7 +246,8 @@ public:
 	int allyteam;                               ///< allyteam that this->team is part of
 
 	const SolidObjectDef* objectDef;            ///< points to a UnitDef or to a FeatureDef instance
-	MoveDef* moveDef;                           ///< holds information about the mobility of this object (if NULL, object is either static or aircraft)
+
+	MoveDef* moveDef;                           ///< mobility information about this object (if NULL, object is either static or aircraft)
 	CollisionVolume* collisionVolume;
 	SolidObjectGroundDecal* groundDecal;
 
@@ -265,7 +265,7 @@ public:
 	float3 drawMidPos;                          ///< = drawPos + relMidPos (unsynced)
 
 	const YardMapStatus* blockMap;              ///< Current (unrotated!) blockmap/yardmap of this object. 0 means no active yardmap => all blocked.
-	int buildFacing;                            ///< Orientation of footprint, 4 different states
+	short int buildFacing;                      ///< Orientation of footprint, 4 different states
 
 	/// quads the object is part of
 	std::vector<int> quads;

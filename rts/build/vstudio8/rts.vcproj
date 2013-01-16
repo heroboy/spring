@@ -4788,6 +4788,14 @@
 					>
 				</File>
 				<File
+					RelativePath="..\..\Sim\Misc\NanoPieceCache.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\Sim\Misc\NanoPieceCache.h"
+					>
+				</File>
+				<File
 					RelativePath="..\..\Sim\Misc\QuadField.cpp"
 					>
 				</File>

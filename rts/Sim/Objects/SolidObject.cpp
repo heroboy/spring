@@ -142,9 +142,6 @@ CSolidObject::CSolidObject():
 CSolidObject::~CSolidObject() {
 	blocking = false;
 
-	delete moveDef;
-	moveDef = NULL;
-
 	delete collisionVolume;
 	collisionVolume = NULL;
 	solidObjects.erase(this);
