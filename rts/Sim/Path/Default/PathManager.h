@@ -13,6 +13,8 @@
 class CSolidObject;
 class CPathFinder;
 class CPathEstimator;
+class PathFlowMap;
+class PathHeatMap;
 class CPathFinderDef;
 struct MoveDef;
 
@@ -27,7 +29,6 @@ public:
 	void Update(ST_FUNC int unused = 0);
 	void UpdateFull();
 	void UpdatePath(ST_FUNC const CSolidObject*, unsigned int);
-
 	void DeletePath(ST_FUNC unsigned int pathID);
 	void MergePathCaches();
 
@@ -80,14 +81,6 @@ public:
 	float GetNodeExtraCost(ST_FUNC unsigned int, unsigned int, bool) const;
 	const float* GetNodeExtraCosts(ST_FUNC bool) const;
 
-
-	/** Enable/disable heat mapping */
-	void SetHeatMappingEnabled(bool enabled);
-	bool GetHeatMappingEnabled();
-
-	void SetHeatOnSquare(int x, int y, int value, const CSolidObject* owner);
-	const int GetHeatOnSquare(int x, int y);
-
 	void GetNumOutstandingEstimatorUpdates(unsigned int* data) const;
 
 private:
@@ -136,6 +129,9 @@ private:
 	CPathFinder* maxResPF;
 	CPathEstimator* medResPE;
 	CPathEstimator* lowResPE;
+
+	PathFlowMap* pathFlowMap;
+	PathHeatMap* pathHeatMap;
 
 	std::map<unsigned int, MultiPath*> pathMap;
 	unsigned int nextPathID;

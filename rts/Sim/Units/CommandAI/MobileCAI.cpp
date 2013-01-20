@@ -603,12 +603,34 @@ void CMobileCAI::ExecuteFight(Command& c)
 }
 
 bool CMobileCAI::IsValidTarget(const CUnit* enemy) const {
-	return enemy && (owner->hasUWWeapons || !enemy->isUnderWater)
-		&& !(owner->unitDef->noChaseCategory & enemy->category)
-		&& !enemy->IsNeutral()
-		// on "Hold pos", a target can not be valid if there exists no line of fire to it.
-		&& (owner->moveState > MOVESTATE_HOLDPOS || owner->weapons.empty() ||
-				owner->weapons.front()->TryTargetRotate(const_cast<CUnit*>(enemy), false));
+	if (!enemy)
+		return false;
+
+	if (enemy == owner)
+		return false;
+
+	if (owner->unitDef->noChaseCategory & enemy->category)
+		return false;
+
+	// don't _auto_ chase neutrals
+	if (enemy->IsNeutral())
+		return false;
+
+	if (owner->weapons.empty())
+		return false;
+
+	// on "Hold pos", a target can not be valid if there exists no line of fire to it.
+	if (owner->moveState == MOVESTATE_HOLDPOS && !owner->weapons.front()->TryTargetRotate(const_cast<CUnit*>(enemy), false))
+		return false;
+
+	// test if any weapon can target the enemy unit
+	for (std::vector<CWeapon*>::iterator it = owner->weapons.begin(); it != owner->weapons.end(); ++it) {
+		if ((*it)->TestTarget(enemy->pos, false, const_cast<CUnit*>(enemy))) {
+			return true;
+		}
+	}
+
+	return false;
 }
 
 /**
@@ -1038,6 +1060,8 @@ void CMobileCAI::FinishCommand()
 
 bool CMobileCAI::MobileAutoGenerateTarget()
 {
+	//FIXME merge with CWeapon::AutoTarget()
+
 	assert(commandQue.empty());
 
 	const bool canAttack = (owner->unitDef->canAttack && !owner->weapons.empty());

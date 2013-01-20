@@ -61,19 +61,21 @@ public:
 	void DependentDied(CObject *o);
 	void ChangeTeam(int newTeam);
 
-	bool IsInLosForAllyTeam(int allyteam) const
+	bool IsInLosForAllyTeam(int argAllyTeam) const
 	{
 		if (alwaysVisible)
 			return true;
+
+		const bool inLOS = (argAllyTeam == -1 || loshandler->InLos(this->pos, argAllyTeam));
+
 		switch (modInfo.featureVisibility) {
 			case CModInfo::FEATURELOS_NONE:
 			default:
-				return loshandler->InLos(this->pos, allyteam);
+				return inLOS;
 			case CModInfo::FEATURELOS_GAIAONLY:
-				return (this->allyteam == -1 || loshandler->InLos(this->pos, allyteam));
+				return (this->allyteam == -1 || inLOS);
 			case CModInfo::FEATURELOS_GAIAALLIED:
-				return (this->allyteam == -1 || this->allyteam == allyteam
-					|| loshandler->InLos(this->pos, allyteam));
+				return (this->allyteam == -1 || this->allyteam == argAllyTeam || inLOS);
 			case CModInfo::FEATURELOS_ALL:
 				return true;
 		}
@@ -83,6 +85,13 @@ public:
 	void QueUnBlock(bool delay = Threading::threadedPath || Threading::multiThreadedSim);
 
 	void ExecuteDelayOps();
+
+	// NOTE:
+	//   unlike CUnit which recalculates the matrix on each call
+	//   (and uses the synced and error args) CFeature caches it
+	//   this matrix is identical in synced and unsynced context!
+	CMatrix44f GetTransformMatrix(const bool synced = false, const bool error = false) const { return transMatrix; }
+	const CMatrix44f& GetTransformMatrixRef() const { return transMatrix; }
 
 public:
 	int defID;
@@ -131,10 +140,10 @@ public:
 	/// initially a copy of CUnit::speed, for trees it stores the impulse that caused the destruction
 	float3 deathSpeed;
 
-	CMatrix44f transMatrix;
-
 private:
 	void PostLoad();
+
+	CMatrix44f transMatrix;
 };
 
 #endif // _FEATURE_H

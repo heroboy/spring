@@ -39,37 +39,6 @@ void CFlameThrower::FireImpl()
 	new CFlameProjectile(params, spread);
 }
 
-bool CFlameThrower::TryTarget(const float3 &pos, bool userTarget, CUnit* unit)
-{
-	if (!CWeapon::TryTarget(pos, userTarget, unit))
-		return false;
-
-	if (!weaponDef->waterweapon && TargetUnitOrPositionInWater(pos, unit))
-		return false;
-
-	float3 dir(pos - weaponMuzzlePos);
-	float length = dir.Length();
-	if (length == 0)
-		return true;
-
-	dir /= length;
-
-	if (!HaveFreeLineOfFire(weaponMuzzlePos, dir, length, unit)) {
-		return false;
-	}
-
-	if (avoidFeature && TraceRay::LineFeatureCol(weaponMuzzlePos, dir, length)) {
-		return false;
-	}
-	if (avoidFriendly && TraceRay::TestCone(weaponMuzzlePos, dir, length, (accuracy + sprayAngle), owner->allyteam, true, false, false, owner)) {
-		return false;
-	}
-	if (avoidNeutral && TraceRay::TestCone(weaponMuzzlePos, dir, length, (accuracy + sprayAngle), owner->allyteam, false, true, false, owner)) {
-		return false;
-	}
-
-	return true;
-}
 
 void CFlameThrower::Update()
 {

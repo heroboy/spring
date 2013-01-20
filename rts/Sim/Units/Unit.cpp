@@ -218,7 +218,6 @@ CUnit::CUnit() : CSolidObject(),
 	posErrorVector(ZeroVector),
 	posErrorDelta(ZeroVector),
 	nextPosErrorUpdate(1),
-	hasUWWeapons(false),
 	wantCloak(false),
 	scriptCloak(0),
 	cloakTimeout(128),
@@ -489,11 +488,11 @@ void CUnit::PostInit(const CUnit* builder)
 	script->Create();
 
 	if (moveDef != NULL) {
-		switch (moveDef->moveType) {
-			case MoveDef::Hover_Move: {
+		switch (moveDef->moveFamily) {
+			case MoveDef::Hover: {
 				physicalState = CSolidObject::Hovering;
 			} break;
-			case MoveDef::Ship_Move: {
+			case MoveDef::Ship: {
 				physicalState = CSolidObject::Floating;
 			} break;
 			default: {
@@ -2972,7 +2971,6 @@ CR_REG_METADATA(CUnit, (
 	CR_MEMBER(posErrorVector),
 	CR_MEMBER(posErrorDelta),
 	CR_MEMBER(nextPosErrorUpdate),
-	CR_MEMBER(hasUWWeapons),
 	CR_MEMBER(wantCloak),
 	CR_MEMBER(scriptCloak),
 	CR_MEMBER(cloakTimeout),

@@ -33,10 +33,6 @@ CBombDropper::CBombDropper(CUnit* owner, bool useTorps)
 	, tracking(0)
 {
 	onlyForward = true;
-
-	if (useTorps && owner) {
-		owner->hasUWWeapons = true;
-	}
 }
 
 CBombDropper::~CBombDropper()
@@ -76,7 +72,7 @@ void CBombDropper::Update()
 	CWeapon::Update();
 }
 
-bool CBombDropper::TryTarget(const float3& pos, bool userTarget, CUnit* unit)
+bool CBombDropper::TestTarget(const float3& pos, bool userTarget, CUnit* unit) const
 {
 	ASSERT_SINGLETHREADED_SIM();
 	if (unit) {
@@ -88,6 +84,12 @@ bool CBombDropper::TryTarget(const float3& pos, bool userTarget, CUnit* unit)
 			return false;
 		}
 	}
+	return CWeapon::TestTarget(pos, userTarget, unit);
+}
+
+bool CBombDropper::HaveFreeLineOfFire(const float3& pos, bool userTarget, CUnit* unit) const
+{
+	//TODO write me
 	return true;
 }
 

@@ -34,14 +34,23 @@ public:
 
 	bool AllowWeaponTargetCheck();
 	bool TargetUnitOrPositionInWater(const float3& targetPos, const CUnit* targetUnit) const;
-	bool HaveFreeLineOfFire(const float3& pos, const float3& dir, float length, const CUnit* target) const;
 	bool CheckTargetAngleConstraint(const float3& worldTargetDir, const float3& worldWeaponDir) const;
 	bool SetTargetBorderPos(CUnit*, float3&, float3&, float3&);
-	virtual bool TryTarget(const float3& pos, bool userTarget, CUnit* unit);
+	bool GetTargetBorderPos(const CUnit*, const float3&, float3&, float3&) const;
+
+	/// test if the weapon is able to attack an enemy/mapspot just by its properties (no range check, no FreeLineOfFire check, ...)
+	virtual bool TestTarget(const float3& pos, bool userTarget, CUnit* unit) const;
+	/// test if the enemy/mapspot is in range/angle
+	bool TestRange(const float3& pos, bool userTarget, CUnit* unit) const;
+	/// test if something is blocking our LineOfFire
+	virtual bool HaveFreeLineOfFire(const float3& pos, bool userTarget, CUnit* unit) const;
+
+	bool TryTarget(const float3& pos, bool userTarget, CUnit* unit) const;
 	bool TryTarget(CUnit* unit, bool userTarget);
 	bool TryTargetRotate(CUnit* unit, bool userTarget);
 	bool TryTargetRotate(float3 pos, bool userTarget);
 	bool TryTargetHeading(short heading, float3 pos, bool userTarget, CUnit* unit = 0);
+
 	bool CobBlockShot(const CUnit* unit);
 	float TargetWeight(const CUnit* unit) const;
 	void SlowUpdate(bool noAutoTargetOverride);
@@ -62,7 +71,7 @@ public:
 	void StopAttackingAllyTeam(int ally);
 	void UpdateInterceptTarget();
 
-private:
+protected:
 	virtual void FireImpl() {}
 
 protected:
@@ -141,15 +150,12 @@ public:
 	float maxForwardAngleDif;     // for onlyForward/!turret weapons, max. angle between owner->frontdir and (targetPos - owner->pos) (derived from UnitDefWeapon::maxAngleDif)
 	float maxMainDirAngleDif;     // for !onlyForward/turret weapons, max. angle from <mainDir> the weapon can aim (derived from WeaponDef::tolerance)
 
-	bool avoidFriendly;           // if true, try to avoid friendly units while aiming
-	bool avoidFeature;            // if true, try to avoid features while aiming
-	bool avoidNeutral;            // if true, try to avoid neutral units while aiming
-
 	float targetBorder;           // if nonzero, units will TryTarget wrt. edge of scaled collision volume instead of centre
 	float cylinderTargeting;      // if greater than 0, range will be checked in a cylinder (height=range*cylinderTargeting) instead of a sphere
 	float minIntensity;           // for beamlasers - always hit with some minimum intensity (a damage coeffcient normally dependent on distance). do not confuse with intensity tag, it's completely unrelated.
 	float heightBoostFactor;      // controls cannon range height boost. default: -1 -- automatically calculate a more or less sane value
 
+	unsigned int avoidFlags;
 	unsigned int collisionFlags;
 
 	float fuelUsage;

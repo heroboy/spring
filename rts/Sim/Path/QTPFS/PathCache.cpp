@@ -78,7 +78,7 @@ void QTPFS::PathCache::AddTempPath(IPath* path) {
 		newTempPaths[path->GetOwner()->id].push_back(path);
 		return;
 	}
-	tempPaths.insert(std::make_pair<unsigned int, IPath*>(path->GetID(), path));
+	tempPaths.insert(std::pair<unsigned int, IPath*>(path->GetID(), path));
 }
 
 void QTPFS::PathCache::AddLivePath(IPath* path) {
@@ -95,7 +95,7 @@ void QTPFS::PathCache::AddLivePath(IPath* path) {
 	}
 	// promote a path from temporary- to live-status (no deletion)
 	tempPaths.erase(path->GetID());
-	livePaths.insert(std::make_pair<unsigned int, IPath*>(path->GetID(), path));
+	livePaths.insert(std::pair<unsigned int, IPath*>(path->GetID(), path));
 }
 
 void QTPFS::PathCache::Merge() {
@@ -235,7 +235,7 @@ bool QTPFS::PathCache::MarkDeadPaths(const QTPFS::PathRectangle& r) {
 				if (Threading::multiThreadedSim) {
 					newDeadPaths[it->second->GetOwner()->id].push_back(it->second);
 				} else {
-					deadPaths.insert(std::make_pair<unsigned int, IPath*>(path->GetID(), path));
+					deadPaths.insert(std::pair<unsigned int, IPath*>(path->GetID(), path));
 					livePathIts.push_back(it);
 				}
 				break;

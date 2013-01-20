@@ -56,6 +56,8 @@ SET(sources_engine_Sim
 		"${CMAKE_CURRENT_SOURCE_DIR}/Path/Default/PathEstimator.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Path/Default/PathFinder.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Path/Default/PathFinderDef.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/Path/Default/PathFlowMap.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/Path/Default/PathHeatMap.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Path/Default/PathManager.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Path/QTPFS/Node.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Path/QTPFS/NodeLayer.cpp"

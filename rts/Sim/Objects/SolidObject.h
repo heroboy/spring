@@ -4,6 +4,7 @@
 #define SOLID_OBJECT_H
 
 #include "WorldObject.h"
+#include "System/Matrix44f.h"
 #include "System/Vec2.h"
 #include "System/Misc/BitwiseEnum.h"
 #include "System/Platform/Threading.h"
@@ -41,7 +42,7 @@ enum YardmapStates {
 	YARDMAP_YARDFREE    = ~YARDMAP_YARD,
 	YARDMAP_GEO         = YARDMAP_BLOCKED,
 };
-typedef BitwiseEnum<YardmapStates> YardMapStatus;
+typedef Bitwise::BitwiseEnum<YardmapStates> YardMapStatus;
 
 
 
@@ -163,6 +164,12 @@ public:
 	void SetMidAndAimPos(const float3& mp, const float3& ap, bool relative) {
 		SetMidPos(mp, relative);
 		SetAimPos(ap, relative);
+	}
+
+	virtual CMatrix44f GetTransformMatrix(const bool synced = false, const bool error = false) const {
+		// should never get called (should be pure virtual, but cause of CREG we cannot use it)
+		assert(false);
+		return CMatrix44f();
 	}
 
 	/**

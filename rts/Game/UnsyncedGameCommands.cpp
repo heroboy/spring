@@ -1954,36 +1954,43 @@ public:
 class ShowPathTraversabilityActionExecutor : public IUnsyncedActionExecutor {
 public:
 	ShowPathTraversabilityActionExecutor() : IUnsyncedActionExecutor("ShowPathTraversability",
-			"Enable rendering of the auxiliary traversability-map (slope-map) overlay") {}
+			"Enable rendering of the path traversability-map overlay") {}
 
 	bool Execute(const UnsyncedAction& action) const {
-		readmap->GetGroundDrawer()->TogglePathTraversabilityTexture();
+		readmap->GetGroundDrawer()->TogglePathTexture(CBaseGroundDrawer::drawPathTraversability);
 		return true;
 	}
 };
-
-
 
 class ShowPathHeatActionExecutor : public IUnsyncedActionExecutor {
 public:
 	ShowPathHeatActionExecutor() : IUnsyncedActionExecutor("ShowPathHeat",
-			"Enable/Disable rendering of the path heat map overlay", true) {}
+			"Enable/Disable rendering of the path heat-map overlay", true) {}
 
 	bool Execute(const UnsyncedAction& action) const {
-		readmap->GetGroundDrawer()->TogglePathHeatTexture();
+		readmap->GetGroundDrawer()->TogglePathTexture(CBaseGroundDrawer::drawPathHeat);
 		return true;
 	}
 };
 
+class ShowPathFlowActionExecutor : public IUnsyncedActionExecutor {
+public:
+	ShowPathFlowActionExecutor() : IUnsyncedActionExecutor("ShowPathFlow",
+			"Enable/Disable rendering of the path flow-map overlay", true) {}
 
+	bool Execute(const UnsyncedAction& action) const {
+		readmap->GetGroundDrawer()->TogglePathTexture(CBaseGroundDrawer::drawPathFlow);
+		return true;
+	}
+};
 
 class ShowPathCostActionExecutor : public IUnsyncedActionExecutor {
 public:
 	ShowPathCostActionExecutor() : IUnsyncedActionExecutor("ShowPathCost",
-			"Enable rendering of the path costs map overlay", true) {}
+			"Enable rendering of the path cost-map overlay", true) {}
 
 	bool Execute(const UnsyncedAction& action) const {
-		readmap->GetGroundDrawer()->TogglePathCostTexture();
+		readmap->GetGroundDrawer()->TogglePathTexture(CBaseGroundDrawer::drawPathCost);
 		return true;
 	}
 };
@@ -3393,6 +3400,7 @@ void UnsyncedGameCommands::AddDefaultActionExecutors() {
 	AddActionExecutor(new ShowMetalMapActionExecutor());
 	AddActionExecutor(new ShowPathTraversabilityActionExecutor());
 	AddActionExecutor(new ShowPathHeatActionExecutor());
+	AddActionExecutor(new ShowPathFlowActionExecutor());
 	AddActionExecutor(new ShowPathCostActionExecutor());
 	AddActionExecutor(new ToggleLOSActionExecutor());
 	AddActionExecutor(new ShareDialogActionExecutor());

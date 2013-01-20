@@ -5,6 +5,8 @@
 #include "PathConstants.h"
 #include "PathFinder.h"
 #include "PathEstimator.h"
+#include "PathFlowMap.hpp"
+#include "PathHeatMap.hpp"
 #include "Map/MapInfo.h"
 #include "Sim/Misc/GlobalSynced.h"
 #include "Sim/Objects/SolidObjectDef.h"
@@ -21,9 +23,12 @@
 
 CPathManager::CPathManager(): nextPathID(0)
 {
+	pathFlowMap = PathFlowMap::GetInstance();
+	pathHeatMap = PathHeatMap::GetInstance();
+
 	maxResPF = new CPathFinder();
-	medResPE = new CPathEstimator(maxResPF,  8, "pe",  mapInfo->map.name);
-	lowResPE = new CPathEstimator(maxResPF, 32, "pe2", mapInfo->map.name);
+	medResPE = new CPathEstimator(maxResPF, MEDRES_PE_BLOCKSIZE, "pe",  mapInfo->map.name);
+	lowResPE = new CPathEstimator(maxResPF, LOWRES_PE_BLOCKSIZE, "pe2", mapInfo->map.name);
 
 	LOG("[CPathManager] pathing data checksum: %08x", GetPathCheckSum());
 
@@ -42,6 +47,9 @@ CPathManager::~CPathManager()
 	delete lowResPE;
 	delete medResPE;
 	delete maxResPF;
+
+	PathHeatMap::FreeInstance(pathHeatMap);
+	PathFlowMap::FreeInstance(pathFlowMap);
 }
 
 
@@ -403,7 +411,10 @@ void CPathManager::TerrainChange(ST_FUNC unsigned int x1, unsigned int z1, unsig
 void CPathManager::Update(ST_FUNC int unused)
 {
 	SCOPED_TIMER("PathManager::Update");
-	maxResPF->UpdateHeatMap();
+
+	pathFlowMap->Update();
+	pathHeatMap->Update();
+
 	medResPE->Update();
 	lowResPE->Update();
 }
@@ -419,36 +430,9 @@ void CPathManager::UpdateFull()
 // used to deposit heat on the heat-map as a unit moves along its path
 void CPathManager::UpdatePath(ST_FUNC const CSolidObject* owner, unsigned int pathID)
 {
-	if (pathID == 0)
-		return;
-	if (!owner->moveDef->heatMapping)
-		return;
-
-#ifndef USE_GML
-	static std::vector<int2> points;
-#else
-	std::vector<int2> points;
-#endif
-
-	GetDetailedPathSquares(pathID, points);
-
-	if (!points.empty()) {
-		float scale = 1.0f / points.size();
-		unsigned int i = points.size();
-
-		for (std::vector<int2>::const_iterator it = points.begin(); it != points.end(); ++it) {
-			SetHeatOnSquare(it->x, it->y, i * scale * owner->moveDef->heatProduced, owner); i--;
-		}
-	}
+	pathFlowMap->AddFlow(owner);
+	pathHeatMap->AddHeat(owner, this, pathID);
 }
-
-
-
-void CPathManager::SetHeatMappingEnabled(bool enabled) { maxResPF->SetHeatMapState(enabled); }
-bool CPathManager::GetHeatMappingEnabled() { return maxResPF->GetHeatMapState(); }
-
-void CPathManager::SetHeatOnSquare(int x, int y, int value, const CSolidObject* owner) { maxResPF->UpdateHeatValue(x, y, value, owner); }
-const int CPathManager::GetHeatOnSquare(int x, int y) { return maxResPF->GetHeatValue(x, y); }
 
 
 
@@ -582,7 +566,7 @@ const float* CPathManager::GetNodeExtraCosts(ST_FUNC bool synced) const {
 
 void CPathManager::GetNumOutstandingEstimatorUpdates(unsigned int* data) const
 {
-	data[0] = medResPE->needUpdate.size();
-	data[1] = lowResPE->needUpdate.size();
+	data[0] = medResPE->updatedBlocks.size();
+	data[1] = lowResPE->updatedBlocks.size();
 }
 

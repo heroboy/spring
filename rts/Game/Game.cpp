@@ -6,7 +6,7 @@
 #include <time.h>
 #include <cctype>
 #include <locale>
-#include <sstream>
+#include <fstream>
 #include <stdexcept>
 
 #include <boost/thread/thread.hpp>
@@ -1208,6 +1208,11 @@ bool CGame::Draw() {
 				if (rcvr) {
 					rcvr->Draw();
 				}
+			}
+		} else {
+			if (globalRendering->dualScreenMode) {
+				// minimap is on its own screen, so always draw it
+				minimap->Draw();
 			}
 		}
 	}
