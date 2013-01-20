@@ -89,6 +89,7 @@ int gmlNextTickUpdate=0;
 unsigned gmlCurrentTicks;
 bool gmlCheckCallChain=false;
 int gmlCallChainWarning=0;
+int ThreadCountReductionForMultiCore() { return ((Threading::GetPhysicalCores() >= 6) ? (int)(Threading::GetAvailableCores() / Threading::GetPhysicalCores()) : 0); }
 
 std::set<Threading::NativeThreadId> threadnums;
 

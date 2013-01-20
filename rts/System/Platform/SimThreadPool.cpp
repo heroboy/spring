@@ -20,6 +20,8 @@ CSimThreadPool::CSimThreadPool() :
 		int pcpu = Threading::GetPhysicalCores();
 		// deduct all logical cores dedicated to the rendering/sim main threads
 		numThreads = std::max((int)GML::NumMainSimThreads(), lcpu - GML::NumMainThreads() * (int)(lcpu / pcpu) + GML::NumMainSimThreads()); // add the main sim thread
+		if (pcpu >= 6)
+			numThreads -= (int)(lcpu / pcpu);
 	}
 	simNumExtraThreads = (!modInfo.multiThreadSim) ? 0 : std::max(0, numThreads - GML::NumMainSimThreads());
 	Threading::SimThreadCount(simNumExtraThreads + GML::NumMainSimThreads() + (modInfo.asyncPathFinder ? 1 : 0));

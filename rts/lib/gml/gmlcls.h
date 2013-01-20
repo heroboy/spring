@@ -182,8 +182,9 @@ extern int gmlThreadNumber;
 extern int gmlThreadCount;
 extern int gmlThreadCountOverride;
 extern unsigned gmlCPUCount();
+extern int ThreadCountReductionForMultiCore();
 #if (BOOST_VERSION >= 103500)
-#	define GML_CPU_COUNT (gmlThreadCountOverride ? gmlThreadCountOverride : boost::thread::hardware_concurrency() )
+#	define GML_CPU_COUNT (gmlThreadCountOverride ? gmlThreadCountOverride : (boost::thread::hardware_concurrency() - ThreadCountReductionForMultiCore()))
 #else
 #	define GML_CPU_COUNT (gmlThreadCountOverride ? gmlThreadCountOverride : gmlCPUCount() )
 #endif

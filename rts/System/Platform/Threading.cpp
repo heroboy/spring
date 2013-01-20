@@ -244,19 +244,24 @@ void ThreadNotUnitOwnerErrorFunc() { LOG_L(L_ERROR, "Illegal attempt to modify a
 		for (int i = 0; i < lcpu; ++i)
 			allmask |= (1 << i);
 		unsigned main = 0;
-		unsigned sim = (pcpu <= 1) ? 1 : cpuq;
+		bool simcore = (pcpu >= 2);
+		bool pathcore = (pcpu >= 6);
+		unsigned sim = simcore ? cpuq : 1;
+		unsigned path = pathcore ? (2 * cpuq) : sim;
 		unsigned mainmask = 1 << main;
 		unsigned simmask = 1 << sim;
+		unsigned pathmask = 1 << path;
 		if (main / cpuq != sim / cpuq) {
 			for (int i = 1; i < cpuq; ++i) {
 				mainmask |= (1 << (main + i));
 				simmask |= (1 << (sim + i));
+				pathmask |= (1 << (path + i));
 			}
 		}
 #ifdef HEADLESS
-		allmask &= GML::SimEnabled() ? ~simmask : ~mainmask;
+		allmask &= GML::SimEnabled() ? ~(simmask | pathmask) : ~mainmask;
 #else
-		allmask &= GML::SimEnabled() ? ~(simmask | mainmask) : ~mainmask;
+		allmask &= GML::SimEnabled() ? ~(mainmask | simmask | pathmask) : ~mainmask;
 #endif
 
 		if (StringCaseCmp(threadName, "Main"))
@@ -268,7 +273,7 @@ void ThreadNotUnitOwnerErrorFunc() { LOG_L(L_ERROR, "Illegal attempt to modify a
 		else if (StringCaseCmp(threadName, "RenderMT", 8))
 			return allmask;
 		else if (StringCaseCmp(threadName, "Path"))
-			return allmask;
+			return pathcore ? (1 << path) : allmask;
 		else
 			LOG_L(L_ERROR, "GetDefaultAffinity: Unknown thread name %s", threadName);
 		return 0;
