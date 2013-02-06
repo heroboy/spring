@@ -82,7 +82,7 @@
 #include "lib/gml/gml_base.h"
 #include "lib/luasocket/src/restrictions.h"
 
-CONFIG(int, SetCoreAffinityAuto).defaultValue(0).safemodeValue(0).description("Automatically configures the CPU affinity for all threads, -1: force disable, 1: force enable.");
+CONFIG(int, SetCoreAffinityAuto).defaultValue(-1).safemodeValue(-1).description("Automatically configures the CPU affinity for all threads, -1: force disable, 1: force enable.");
 CONFIG(unsigned, SetCoreAffinity).defaultValue(0).safemodeValue(1).description("Defines a bitmask indicating which CPU cores the main-thread should use.");
 CONFIG(unsigned, SetCoreAffinitySim).defaultValue(0).safemodeValue(1).description("Defines a bitmask indicating which CPU cores the primary sim-thread should use.");
 CONFIG(unsigned, SetCoreAffinitySimMT).defaultValue(0).safemodeValue(1).description("Defines a bitmask indicating which CPU cores the secondary sim-thread(s) should use.");
@@ -111,7 +111,7 @@ CONFIG(int, WindowPosY).defaultValue(32);
 CONFIG(int, WindowState).defaultValue(0);
 CONFIG(bool, WindowBorderless).defaultValue(false);
 CONFIG(int, PathingThreadCount).defaultValue(0).safemodeValue(1).minimumValue(0);
-CONFIG(int, MultiThreadCount).defaultValue(0).safemodeValue(1).minimumValue(0).maximumValue(GML_MAX_NUM_THREADS);
+CONFIG(int, MultiThreadCount).defaultValue(4).safemodeValue(4).minimumValue(4).maximumValue(4);
 CONFIG(std::string, name).defaultValue(UnnamedPlayerName);
 
 

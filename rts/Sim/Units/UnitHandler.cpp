@@ -32,7 +32,7 @@
 #include "System/creg/STL_List.h"
 #include "System/creg/STL_Set.h"
 
-CONFIG(int, SimThreadCount).defaultValue(0).safemodeValue(1).minimumValue(0).maximumValue(GML_MAX_NUM_THREADS);
+CONFIG(int, SimThreadCount).defaultValue(3).safemodeValue(3).minimumValue(3).maximumValue(3);
 
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
