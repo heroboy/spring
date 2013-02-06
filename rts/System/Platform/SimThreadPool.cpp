@@ -4,6 +4,7 @@
 #include "System/Config/ConfigHandler.h"
 #include "System/Log/ILog.h"
 #include "Sim/Misc/ModInfo.h"
+#include "lib/streflop/streflop_cond.h"
 
 CSimThreadPool::CSimThreadPool() :
 	stopThread(false),

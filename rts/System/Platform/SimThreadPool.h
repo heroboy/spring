@@ -14,13 +14,13 @@ public:
 	long NextIter() { return ++atomicCount; }
 
 private:
-	gmlCount atomicCount;
-	int simNumExtraThreads;
-	boost::barrier* simBarrier;
-	boost::thread* simThreads[GML_MAX_NUM_THREADS];
 	volatile bool stopThread;
+	gmlCount atomicCount;
+	boost::barrier* simBarrier;
 	void (* volatile InitThreadFunc)(bool);
 	void (* volatile ThreadFunc)(bool);
+	int simNumExtraThreads;
+	boost::thread* simThreads[GML_MAX_NUM_THREADS];
 };
 
 #endif // SIMTHREADPOOL_H
