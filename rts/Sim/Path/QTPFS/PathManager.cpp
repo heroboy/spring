@@ -863,7 +863,7 @@ unsigned int QTPFS::PathManager::QueueSearch(
 		assert(!synced);
 
 		const CSolidObject* obj = oldPath->GetOwner();
-		const float3& pos = (obj != NULL)? obj->pos: oldPath->GetSourcePoint();
+		const float3& pos = (obj != NULL)? obj->StablePos() : oldPath->GetSourcePoint();
 
 		newPath->SetID(oldPath->GetID());
 		newPath->SetNextPointIndex(0);
