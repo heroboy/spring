@@ -894,7 +894,7 @@ unsigned int QTPFS::PathManager::QueueSearch(
 		newPath->SetSourcePoint(sourcePoint);
 		newPath->SetTargetPoint(targetPoint);
 		newSearch->SetID(newPath->GetID());
-		newSearch->SetTeam((object != NULL)? object->team: teamHandler->ActiveTeams());
+		newSearch->SetTeam((object != NULL)? object->StableTeam(): teamHandler->ActiveTeams());
 	}
 
 	assert((pathCaches[moveDef->pathType].GetTempPath(newPath->GetID()))->GetID() == 0);

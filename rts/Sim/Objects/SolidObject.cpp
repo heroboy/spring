@@ -133,6 +133,7 @@ CSolidObject::CSolidObject():
 	stableCrushable(false),
 	stableCrushResistance(0.0f),
 	stablePhysicalState(OnGround),
+	stableTeam(0),
 #endif
 	buildFacing(0)
 {
@@ -162,6 +163,7 @@ void CSolidObject::StableSlowUpdate() {
 	stableBlocking = blocking;
 	stableIsUnderWater = isUnderWater;
 	stablePhysicalState = physicalState;
+	stableTeam = team;
 }
 
 void CSolidObject::StableUpdate(bool slow) {
@@ -191,6 +193,7 @@ void CSolidObject::StableInit(bool stable) {
 		pStableCrushable = &stableCrushable;
 		pStableCrushResistance = &stableCrushResistance;
 		pStablePhysicalState = &stablePhysicalState;
+		pStableTeam = &stableTeam;
 	} else {
 		pStableBlocking = &blocking;
 		pStablePos = &pos;
@@ -209,6 +212,7 @@ void CSolidObject::StableInit(bool stable) {
 		pStableCrushable = &crushable;
 		pStableCrushResistance = &crushResistance;
 		pStablePhysicalState = &physicalState;
+		pStableTeam = &team;
 	}
 }
 #endif
