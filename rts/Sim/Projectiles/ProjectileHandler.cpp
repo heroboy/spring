@@ -491,6 +491,7 @@ void CProjectileHandler::CheckCollisionsThreaded(ProjectileContainer &pc, int cu
 	int countEnd = curPos + pc.size();
 	for(ProjectileContainer::iterator pi = pc.begin(); nextPos < countEnd; nextPos = simThreadPool->NextIter()) {
 		while(curPos < nextPos) { ++pi; ++curPos; }
+		Threading::SetThreadCurrentObjectID((*pi)->synced ? (*pi)->id : -1);
 		CheckProjectileCollision(*pi);
 	}
 }

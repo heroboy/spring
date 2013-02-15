@@ -10,6 +10,14 @@
 #include "System/Platform/Threading.h"
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/condition.hpp>
+#include "System/Sync/DesyncDetector.h"
+
+#if defined(USE_DESYNC_DETECTOR) && defined(MT_DESYNC_DETECTION)
+#include "Sim/Objects/SolidObject.h"
+#define OWNERID(x) , ownerid(x)
+#else
+#define OWNERID(x)
+#endif
 
 enum ThreadParam { THREAD_DUMMY };
 
@@ -109,17 +117,17 @@ public:
 	bool IsFailPath(unsigned int pathID);
 
 	struct PathOpData {
-		PathOpData() : type(PATH_NONE), moveDef(NULL), startPos(ZeroVector), goalPos(ZeroVector), minDistance(0.0f), owner(NULL), synced(false), pathID(-1), numRetries(0) {}
+		PathOpData() : type(PATH_NONE), moveDef(NULL), startPos(ZeroVector), goalPos(ZeroVector), minDistance(0.0f), owner(NULL), synced(false), pathID(-1), numRetries(0) OWNERID(-1) {}
 		PathOpData(PathRequestType tp, unsigned int pID, const MoveDef* md, const float3& sp, const float3& gp, float gr, const CSolidObject* own, bool sync):
-		type(tp), moveDef(md), startPos(sp), goalPos(gp), goalRadius(gr), owner(own), synced(sync), pathID(pID), numRetries(0) {}
+		type(tp), moveDef(md), startPos(sp), goalPos(gp), goalRadius(gr), owner(own), synced(sync), pathID(pID), numRetries(0) OWNERID(own?own->id:-1) {}
 		PathOpData(PathRequestType tp, const CSolidObject* own, unsigned int pID):
-		type(tp), moveDef(NULL), startPos(ZeroVector), goalPos(ZeroVector), minDistance(0.0f), owner(own), synced(false), pathID(pID), numRetries(0) {}
+		type(tp), moveDef(NULL), startPos(ZeroVector), goalPos(ZeroVector), minDistance(0.0f), owner(own), synced(false), pathID(pID), numRetries(0) OWNERID(own?own->id:-1) {}
 		PathOpData(PathRequestType tp, unsigned int pID):
-		type(tp), moveDef(NULL), startPos(ZeroVector), goalPos(ZeroVector), minDistance(0.0f), owner(NULL), synced(false), pathID(pID), numRetries(0) {}
+		type(tp), moveDef(NULL), startPos(ZeroVector), goalPos(ZeroVector), minDistance(0.0f), owner(NULL), synced(false), pathID(pID), numRetries(0) OWNERID(-1) {}
 		PathOpData(PathRequestType tp, unsigned int pID, const float3& callPos, float minDist, int nRet, const CSolidObject* own, bool sync):
-		type(tp), moveDef(NULL), startPos(callPos), goalPos(ZeroVector), minDistance(minDist), owner(own), synced(sync), pathID(pID), numRetries(nRet) {}
+		type(tp), moveDef(NULL), startPos(callPos), goalPos(ZeroVector), minDistance(minDist), owner(own), synced(sync), pathID(pID), numRetries(nRet) OWNERID(own?own->id:-1) {}
 		PathOpData(PathRequestType tp, unsigned int x1, unsigned int z1, unsigned int x2, unsigned int z2):
-		type(tp), moveDef(NULL), startPos(ZeroVector), goalPos(ZeroVector), cx1(x1), cx2(x2), synced(false), cz1(z1), cz2(z2) {}
+		type(tp), moveDef(NULL), startPos(ZeroVector), goalPos(ZeroVector), cx1(x1), cx2(x2), synced(false), cz1(z1), cz2(z2) OWNERID(-1) {}
 
 		PathRequestType type;
 		const MoveDef* moveDef;
@@ -135,6 +143,9 @@ public:
 		bool synced;
 		union {	int pathID, cz1; };
 		union { int numRetries, cz2; };
+#if defined(USE_DESYNC_DETECTOR) && defined(MT_DESYNC_DETECTION)
+		int ownerid;
+#endif
 	};
 
 	struct PathUpdateData {

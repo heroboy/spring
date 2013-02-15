@@ -52,12 +52,12 @@ namespace QTPFS {
 		      IPath* GetPath(unsigned int pathID, unsigned int pathType);
 
 		PathMap tempPaths;
-		std::map<int, std::vector<IPath *> > newTempPaths;
+		std::map<int, std::list<IPath *> > newTempPaths;
 		PathMap livePaths;
-		std::map<int, std::vector<IPath *> > newLivePaths;
+		std::map<int, std::list<IPath *> > newLivePaths;
 		PathMap deadPaths;
-		std::map<int, std::vector<IPath *> > newDeadPaths;
-		std::map<int, std::vector<IPath *> > newDelPaths;
+		std::map<int, std::list<IPath *> > newDelPaths;
+		PathMap allPaths;
 
 		std::vector<unsigned int> numCacheHits;
 		std::vector<unsigned int> numCacheMisses;

@@ -296,6 +296,7 @@ public:
 	float stableCrushResistance, *pStableCrushResistance;
 	PhysicalState stablePhysicalState, *pStablePhysicalState;
 	int stableTeam, *pStableTeam;
+	bool stableBlockEnemyPushing, *pStableBlockEnemyPushing;
 	// shall return "stable" values, that do not suddenly change during a sim frame. (for multithreading purposes)
 	const bool StableBlocking() const { return *pStableBlocking; }
 	const float3& StablePos() const { return *pStablePos; }
@@ -317,6 +318,7 @@ public:
 	const PhysicalState StablePhysicalState() const { return *pStablePhysicalState; }
 	const int StableAllyTeam() const { return allyteam; } // is stable by itself
 	const int StableTeam() const { return *pStableTeam; }
+	const bool StableBlockEnemyPushing() const { return *pStableBlockEnemyPushing; }
 
 	void StableInit(bool stable);
 	virtual void StableUpdate(bool slow);
@@ -342,6 +344,7 @@ public:
 	const PhysicalState StablePhysicalState() const { return physicalState; }
 	const int StableAllyTeam() const { return allyteam; } // is stable by itself
 	const int StableTeam() const { return team; }
+	const bool StableBlockEnemyPushing() const { return blockEnemyPushing; }
 
 	void StableInit(bool stable) {}
 	void StableUpdate(bool slow) {}

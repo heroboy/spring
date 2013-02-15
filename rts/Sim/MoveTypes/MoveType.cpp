@@ -44,7 +44,7 @@ AMoveType::AMoveType(CUnit* owner):
 	maxSpeed(owner->unitDef->speed / GAME_SPEED),
 	maxSpeedDef(owner->unitDef->speed / GAME_SPEED),
 	maxWantedSpeed(owner->unitDef->speed / GAME_SPEED),
-#if STABLE_UPDATE && DEBUG_STABLE_UPDATE
+#if STABLE_UPDATE
 	stableIsSkidding(false),
 	stableIsFlying(false),
 	stableGoalPos(owner? owner->pos: ZeroVector),

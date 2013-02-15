@@ -19,7 +19,6 @@
 
 #define DEBUG_MULTITHREADED_SIM (0 && GML_ENABLE_SIM) // enable debug output, requires GML
 #define DEBUG_THREADED_PATH (0 && GML_ENABLE_SIM) // enable debug output, requires GML
-#define DEBUG_STABLE_UPDATE (0 && GML_ENABLE_SIM) // enable debug output, requires GML
 
 namespace Threading {
 	/**
@@ -83,12 +82,14 @@ namespace Threading {
 	#define ASSERT_THREAD_OWNS_UNIT() do { if (DEBUG_MULTITHREADED_SIM && Threading::multiThreadedSim && Threading::threadCurrentUnitIDs[GML::ThreadNumber()] != id) { Threading::ThreadNotUnitOwnerErrorFunc(); } } while (false)
 	inline void SetMultiThreadedSim(bool mts) { multiThreadedSim = mts; }
 	extern int threadCurrentUnitIDs[];
-	inline void SetThreadCurrentUnitID(int id) { if (DEBUG_MULTITHREADED_SIM) threadCurrentUnitIDs[GML::ThreadNumber()] = id; }
+	inline int GetThreadCurrentObjectID() { return threadCurrentUnitIDs[GML::ThreadNumber()]; }
+	inline void SetThreadCurrentObjectID(int id) { if (DEBUG_MULTITHREADED_SIM) { if (id < 0) DesyncDetector::Close(); threadCurrentUnitIDs[GML::ThreadNumber()] = id; } }
 #else
 	#define ASSERT_SINGLETHREADED_SIM()
 	#define ASSERT_THREAD_OWNS_UNIT()
 	inline void SetMultiThreadedSim(bool mts) {}
-	inline void SetThreadCurrentUnitID(int id) {}
+	inline int GetThreadCurrentObjectID() { return 0; }
+	inline void SetThreadCurrentObjectID(int id) {}
 #endif
 #if THREADED_PATH
 	extern void NonThreadedPathErrorFunc();

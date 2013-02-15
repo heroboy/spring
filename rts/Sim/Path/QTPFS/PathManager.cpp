@@ -686,6 +686,7 @@ void QTPFS::PathManager::ThreadUpdate() {
 		sharedPaths.clear();
 
 		for (unsigned int pathTypeUpdate = minPathTypeUpdate; pathTypeUpdate < maxPathTypeUpdate; pathTypeUpdate++) {
+			pathCaches[pathTypeUpdate].Merge();
 			#ifndef QTPFS_IGNORE_DEAD_PATHS
 			QueueDeadPathSearches(pathTypeUpdate);
 			#endif
@@ -823,7 +824,9 @@ void QTPFS::PathManager::QueueDeadPathSearches(unsigned int pathType) {
 		// re-request LIVE paths that were marked as DEAD by a TerrainChange
 		// for each of these now-dead paths, reset the active point-idx to 0
 		for (deadPathsIt = deadPaths.begin(); deadPathsIt != deadPaths.end(); ++deadPathsIt) {
-			QueueSearch(deadPathsIt->second, NULL, moveDef, ZeroVector, ZeroVector, -1.0f, false);
+			if (deadPathsIt->second->GetOwner() != NULL) {
+				QueueSearch(deadPathsIt->second, NULL, moveDef, ZeroVector, ZeroVector, -1.0f, false);
+			}
 		}
 
 		pathCache.KillDeadPaths();

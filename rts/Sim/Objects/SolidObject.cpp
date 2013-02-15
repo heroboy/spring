@@ -115,7 +115,7 @@ CSolidObject::CSolidObject():
 	midPos(pos),
 	mapPos(GetMapPos()),
 	blockMap(NULL),
-#if STABLE_UPDATE && DEBUG_STABLE_UPDATE
+#if STABLE_UPDATE
 	stableBlocking(false),
 	stablePos(pos),
 	stableMidPos(pos),
@@ -134,6 +134,7 @@ CSolidObject::CSolidObject():
 	stableCrushResistance(0.0f),
 	stablePhysicalState(OnGround),
 	stableTeam(0),
+	stableBlockEnemyPushing(true),
 #endif
 	buildFacing(0)
 {
@@ -164,6 +165,7 @@ void CSolidObject::StableSlowUpdate() {
 	stableIsUnderWater = isUnderWater;
 	stablePhysicalState = physicalState;
 	stableTeam = team;
+	stableBlockEnemyPushing = blockEnemyPushing;
 }
 
 void CSolidObject::StableUpdate(bool slow) {
@@ -194,6 +196,7 @@ void CSolidObject::StableInit(bool stable) {
 		pStableCrushResistance = &stableCrushResistance;
 		pStablePhysicalState = &stablePhysicalState;
 		pStableTeam = &stableTeam;
+		pStableBlockEnemyPushing = &stableBlockEnemyPushing;
 	} else {
 		pStableBlocking = &blocking;
 		pStablePos = &pos;
@@ -213,6 +216,7 @@ void CSolidObject::StableInit(bool stable) {
 		pStableCrushResistance = &crushResistance;
 		pStablePhysicalState = &physicalState;
 		pStableTeam = &team;
+		pStableBlockEnemyPushing = &blockEnemyPushing;
 	}
 }
 #endif

@@ -68,16 +68,16 @@ CFeature::CFeature() : CSolidObject(),
 	udef(NULL),
 
 	myFire(NULL),
-#if STABLE_UPDATE && DEBUG_STABLE_UPDATE
-	stableReachedFinalPos(true),
+#if STABLE_UPDATE
+	// stable variables shall be inited hére
 #endif
 	solidOnTop(NULL)
 {
+	StableInit(modInfo.asyncPathFinder);
 	crushable = true;
 	immobile = true;
 
 	physicalState = OnGround;
-	StableInit(modInfo.asyncPathFinder);
 }
 
 CFeature::~CFeature()
@@ -192,6 +192,7 @@ void CFeature::Initialize(const FeatureLoadParams& params)
 	// maybe should not be here, but it prevents crashes caused by team = -1
 	ChangeTeam(team);
 
+	StableUpdate(true);
 	if (blocking) {
 		QueBlock();
 	}
@@ -204,7 +205,6 @@ void CFeature::Initialize(const FeatureLoadParams& params)
 
 	deathSpeed = params.speed;
 	isMoving = ((deathSpeed != ZeroVector) || (std::fabs(pos.y - finalHeight) >= 0.01f));
-	StableUpdate(true);
 }
 
 

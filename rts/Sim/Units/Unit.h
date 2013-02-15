@@ -518,7 +518,6 @@ public:
 
 	bool CommandQueEmpty() const;
 #if STABLE_UPDATE
-	bool stableBlockEnemyPushing, *pStableBlockEnemyPushing;
 	bool stableBeingBuilt, *pStableBeingBuilt;
 	bool stableIsDead, *pStableIsDead;
 	CTransportUnit* stableTransporter, **pStableTransporter;
@@ -526,7 +525,6 @@ public:
 	bool stableCommandQueEmpty, (CUnit::*pStableCommandQueEmpty)() const;
 	int stableLoadingTransportId, *pStableLoadingTransportId;
 	// shall return "stable" values, that do not suddenly change during a sim frame. (for multithreading purposes)
-	const bool StableBlockEnemyPushing() const { return *pStableBlockEnemyPushing; }
 	const bool StableUsingScriptMoveType() const { return usingScriptMoveType; } // appears to be MT stable by itself
 	const bool StableBeingBuilt() const { return *pStableBeingBuilt; }
 	const bool StableIsDead() const { return *pStableIsDead; }
@@ -541,7 +539,6 @@ public:
 	virtual void StableUpdate(bool slow);
 	void StableSlowUpdate();
 #else
-	const bool StableBlockEnemyPushing() const { return blockEnemyPushing; }
 	const bool StableUsingScriptMoveType() const { return usingScriptMoveType; }
 	const bool StableBeingBuilt() const { return beingBuilt; }
 	const bool StableIsDead() const { return isDead; }

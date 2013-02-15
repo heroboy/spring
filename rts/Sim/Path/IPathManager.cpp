@@ -193,6 +193,8 @@ unsigned int IPathManager::RequestPath(
 
 void IPathManager::AsynchronousThread() {
 	streflop::streflop_init<streflop::Simple>();
+	GML::ThreadNumber(GML_MAX_NUM_THREADS);
+	Threading::SetThreadCurrentObjectID(-1);
 	Threading::SetAffinityHelper("Path", configHandler->GetUnsigned("SetCoreAffinityPath"));
 
 	while(true) {
@@ -215,6 +217,10 @@ void IPathManager::AsynchronousThread() {
 		for (std::vector<PathOpData>::iterator i = pops.begin(); i != pops.end(); ++i) {
 			PathOpData &cid = *i;
 			unsigned int pid;
+#if defined(USE_DESYNC_DETECTOR) && defined(MT_DESYNC_DETECTION)
+			if (cid.ownerid >= 0)
+				Threading::SetThreadCurrentObjectID(cid.ownerid + MAX_UNITS);
+#endif
 			switch(cid.type) {
 				case REQUEST_PATH:
 					pid = RequestPath(ST_CALL cid.moveDef, cid.startPos, cid.goalPos, cid.goalRadius, const_cast<CSolidObject*>(cid.owner), cid.synced);
@@ -250,6 +256,10 @@ void IPathManager::AsynchronousThread() {
 				default:
 					LOG_L(L_ERROR,"Invalid path request %d", cid.type);
 			}
+#if defined(USE_DESYNC_DETECTOR) && defined(MT_DESYNC_DETECTION)
+			if (cid.ownerid >= 0)
+				Threading::SetThreadCurrentObjectID(-1);
+#endif
 		}
 	}
 }

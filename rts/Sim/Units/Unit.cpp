@@ -245,8 +245,7 @@ CUnit::CUnit() : CSolidObject(),
 	lastDrawFrame(-30),
 #endif
 	lastUnitUpdate(0),
-#if STABLE_UPDATE && DEBUG_STABLE_UPDATE
-	stableBlockEnemyPushing(true),
+#if STABLE_UPDATE
 	stableBeingBuilt(true),
 	stableIsDead(false),
 	stableTransporter(NULL),
@@ -256,8 +255,8 @@ CUnit::CUnit() : CSolidObject(),
 #endif
 	stunned(false)
 {
-	GML::GetTicks(lastUnitUpdate);
 	StableInit(modInfo.asyncPathFinder);
+	GML::GetTicks(lastUnitUpdate);
 }
 
 CUnit::~CUnit()
@@ -514,6 +513,7 @@ void CUnit::PostInit(const CUnit* builder)
 	blocking = unitDef->blocking;
 	blocking &= !(immobile && unitDef->canKamikaze);
 
+	StableUpdate(true);
 	if (blocking) {
 		IPathManager::ScopedDisableThreading sdt; // prevent units being built on top of each other :)
 		QueBlock();
@@ -569,7 +569,6 @@ void CUnit::PostInit(const CUnit* builder)
 		// skip past the gradual build-progression
 		FinishedBuilding(true);
 	}
-	StableUpdate(true);
 }
 
 
@@ -2787,7 +2786,6 @@ int CUnit::ExecuteDelayOps() {
 bool CUnit::CommandQueEmpty() const { return commandAI->commandQue.empty(); }
 #if STABLE_UPDATE
 void CUnit::StableSlowUpdate() {
-	stableBlockEnemyPushing = blockEnemyPushing;
 	stableBeingBuilt = beingBuilt;
 	stableStunned = stunned;
 	stableCommandQueEmpty = commandAI->commandQue.empty();
@@ -2809,7 +2807,6 @@ void CUnit::StableUpdate(bool slow) {
 
 void CUnit::StableInit(bool stable) {
 	if (stable) {
-		pStableBlockEnemyPushing = &stableBlockEnemyPushing;
 		pStableBeingBuilt = &stableBeingBuilt;
 		pStableIsDead = &stableIsDead;
 		pStableTransporter = &stableTransporter;
@@ -2817,7 +2814,6 @@ void CUnit::StableInit(bool stable) {
 		pStableCommandQueEmpty = &CUnit::CommandQueEmptyStable;
 		pStableLoadingTransportId = &stableLoadingTransportId;
 	} else {
-		pStableBlockEnemyPushing = &blockEnemyPushing;
 		pStableBeingBuilt = &beingBuilt;
 		pStableIsDead = &isDead;
 		pStableTransporter = &transporter;

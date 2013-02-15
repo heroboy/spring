@@ -387,7 +387,7 @@ void CUnitHandler::UpdateMoveTypeThreadFunc(bool threaded) {
 	if (!threaded) {
 		for (std::list<CUnit*>::iterator usi = activeUnits.begin(); usi != activeUnits.end(); ++usi) {
 			CUnit *unit = *usi;
-			Threading::SetThreadCurrentUnitID(unit->id);
+			Threading::SetThreadCurrentObjectID(unit->id);
 			UpdateMoveType(unit);
 		}
 		return;
@@ -401,7 +401,7 @@ void CUnitHandler::UpdateMoveTypeThreadFunc(bool threaded) {
 		if (nextPos >= countEnd) break;
 		while(curPos < nextPos) { ++usi; ++curPos; }
 		CUnit *unit = *usi;
-		Threading::SetThreadCurrentUnitID(unit->id);
+		Threading::SetThreadCurrentObjectID(unit->id);
 		UpdateMoveType(unit);
 	}
 }
@@ -420,7 +420,7 @@ void CUnitHandler::SlowUpdateMoveTypeThreadFunc(bool threaded) {
 
 		for (; sui != activeUnits.end() && n != 0; ++sui) {
 			CUnit *unit = *sui;
-			Threading::SetThreadCurrentUnitID(unit->id);
+			Threading::SetThreadCurrentObjectID(unit->id);
 			unit->moveType->SlowUpdate();
 		}
 		return;
@@ -437,7 +437,7 @@ void CUnitHandler::SlowUpdateMoveTypeThreadFunc(bool threaded) {
 		if (sui == activeUnits.end()) break;
 
 		CUnit *unit = *sui;
-		Threading::SetThreadCurrentUnitID(unit->id);
+		Threading::SetThreadCurrentObjectID(unit->id);
 		unit->moveType->SlowUpdate();
 	}
 }
@@ -451,6 +451,7 @@ void CUnitHandler::DelayedSlowUpdateMoveTypeThreadFunc(bool threaded) {
 		int nextPos = simThreadPool->NextIter();
 		if (nextPos >= countEnd)
 			break;
+		Threading::SetThreadCurrentObjectID(nextPos);
 		switch(nextPos) {
 			case 0:
 				for (int i = 0; i < MAX_UNITS; ++i) {

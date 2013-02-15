@@ -58,7 +58,9 @@ void CSimThreadPool::Execute(void (* tf)(bool), void (* itf)(bool), int i) {
 			simBarrier->wait();
 			if (stopThread)
 				break;
+			Threading::SetThreadCurrentObjectID(-1);
 			(*ThreadFunc)(true);
+			Threading::SetThreadCurrentObjectID(-1);
 			simBarrier->wait();
 		} while (i > 0);
 	}
