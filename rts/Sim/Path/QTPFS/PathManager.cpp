@@ -824,7 +824,7 @@ void QTPFS::PathManager::QueueDeadPathSearches(unsigned int pathType) {
 		// re-request LIVE paths that were marked as DEAD by a TerrainChange
 		// for each of these now-dead paths, reset the active point-idx to 0
 		for (deadPathsIt = deadPaths.begin(); deadPathsIt != deadPaths.end(); ++deadPathsIt) {
-			if (deadPathsIt->second->GetOwner() != NULL) {
+			if (!deadPathsIt->second->IsDeleted()) {
 				QueueSearch(deadPathsIt->second, NULL, moveDef, ZeroVector, ZeroVector, -1.0f, false);
 			}
 		}
@@ -857,6 +857,7 @@ unsigned int QTPFS::PathManager::QueueSearch(
 	assert(newSearch != NULL);
 
 	if (oldPath != NULL) {
+		assert(!oldPath->IsDeleted());
 		assert(oldPath->GetID() != 0);
 		// argument values are unused in this case
 		assert(object == NULL);
