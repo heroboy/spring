@@ -107,10 +107,10 @@ void ThreadNotUnitOwnerErrorFunc() { LOG_L(L_ERROR, "Illegal attempt to modify a
 	#endif
 	}
 
-	void SetAffinityHelper(const char *threadName, uint32_t affinity) {
+	void SetAffinityHelper(const char *threadName, boost::uint32_t affinity) {
 		if (affinity == 0)
 			affinity = GetDefaultAffinity(threadName);
-		const uint32_t cpuMask  = Threading::SetAffinity(affinity);
+		const boost::uint32_t cpuMask  = Threading::SetAffinity(affinity);
 		if (cpuMask == ~0) {
 			LOG("[Threading] %s thread CPU affinity not set", threadName);
 		}
