@@ -26,7 +26,7 @@
 // -------------------------------------------------------------------------------------------------
 // STATICS
 
-RenderMode Patch::renderMode = VBO;
+Patch::RenderMode Patch::renderMode = Patch::VBO;
 
 static size_t poolSize = 0;
 static std::vector<CTriNodePool*> pools;
@@ -34,6 +34,7 @@ static std::vector<CTriNodePool*> pools;
 void CTriNodePool::InitPools(const size_t newPoolSize)
 {
 	if (pools.empty()) {
+		Threading::OMPCheck();
 		#pragma omp parallel
 		{
 			#pragma omp master

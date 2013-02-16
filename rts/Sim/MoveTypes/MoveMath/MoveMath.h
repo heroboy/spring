@@ -60,9 +60,13 @@ public:
 	// tells whether a given object is blocking the given MoveDef
 	static bool CrushResistant(const MoveDef& colliderMD, const CSolidObject* collidee);
 	static bool IsNonBlocking(const MoveDef& colliderMD, const CSolidObject* collidee, const CSolidObject* collider);
+	static bool IsNonBlocking(const CSolidObject* collidee, const MoveDef* colliderMD, const float3 colliderPos, const float colliderHeight);
 
 	// returns the block-status of a single quare
 	static BlockType SquareIsBlocked(const MoveDef& moveDef, int xSquare, int zSquare, const CSolidObject* collider);
+	static BlockType SquareIsBlocked(const MoveDef& moveDef, const float3& pos, const CSolidObject* collider) {
+		return SquareIsBlocked(moveDef, pos.x / SQUARE_SIZE, pos.z / SQUARE_SIZE, collider);
+	}
 
 public:
 	static bool noHoverWaterMove;

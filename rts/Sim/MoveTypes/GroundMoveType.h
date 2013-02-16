@@ -31,7 +31,7 @@ public:
 	void KeepPointingTo(CUnit* unit, float distance, bool aggressive);
 
 	void TestNewTerrainSquare();
-	void ImpulseAdded(const float3&);
+	bool CanApplyImpulse(const float3&);
 	void LeaveTransport();
 
 	void StartSkidding() { skidding = true; }
@@ -72,7 +72,8 @@ private:
 		const float collideeRadius,
 		const float3& separationVector,
 		bool canRequestPath,
-		bool checkYardMap = false);
+		bool checkYardMap,
+		bool checkTerrain);
 
 	void HandleUnitCollisions(
 		CUnit* collider,

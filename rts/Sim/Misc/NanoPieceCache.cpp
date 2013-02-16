@@ -16,12 +16,13 @@ int NanoPieceCache::GetNanoPiece(CUnitScript* ownerScript) {
 		nanoPiece = nanoPieces[rnd % cnt];
 	}
 
-	if (lastNanoPieceCnt <= 30) {
+	if (lastNanoPieceCnt <= MAX_QUERYNANOPIECE_CALLS) {
 		// only do so 30 times and then use the cache
 		const int scriptPiece = ownerScript->QueryNanoPiece();
+		const int modelPiece  = ownerScript->ScriptToModel(scriptPiece);
 
-		if (scriptPiece >= 0) {
-			nanoPiece = scriptPiece;
+		if (ownerScript->PieceExists(scriptPiece)) {
+			nanoPiece = modelPiece;
 
 			if (std::find(nanoPieces.begin(), nanoPieces.end(), nanoPiece) != nanoPieces.end()) {
 				// already in cache

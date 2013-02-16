@@ -224,28 +224,48 @@ static inline bool isBeingServicedOnPad(CUnit* u)
 	return (a != NULL && a->GetPadStatus() != 0);
 }
 
+
+void CWeapon::UpdateRelWeaponPos()
+{
+	// If we can't get a line of fire from the muzzle, try
+	// the aim piece instead (since the weapon may just be
+	// turned in a wrong way)
+	int weaponPiece = -1;
+	bool weaponAimed = (useWeaponPosForAim == 0);
+
+	if (!weaponAimed) {
+		weaponPiece = owner->script->QueryWeapon(weaponNum);
+	} else {
+		weaponPiece = owner->script->AimFromWeapon(weaponNum);
+	}
+
+	relWeaponMuzzlePos = owner->script->GetPiecePos(weaponPiece);
+
+	if (!weaponAimed) {
+		weaponPiece = owner->script->AimFromWeapon(weaponNum);
+	}
+
+	relWeaponPos = owner->script->GetPiecePos(weaponPiece);
+}
+
 void CWeapon::Update()
 {
+	UpdateTargeting();
+	UpdateStockpile();
+	UpdateFire();
+	UpdateSalvo();
+
+#ifdef TRACE_SYNC
+	tracefile << __FUNCTION__;
+	tracefile << weaponPos.x << " " << weaponPos.y << " " << weaponPos.z << " " << targetPos.x << " " << targetPos.y << " " << targetPos.z << "\n";
+#endif
+}
+
+
+void CWeapon::UpdateTargeting()
+{
 	if (hasCloseTarget) {
-		int weaponPiece = -1;
-		bool weaponAimed = (useWeaponPosForAim == 0);
-
-		// if we couldn't get a line of fire from the
-		// muzzle, try if we can get it from the aim
-		// piece
-		if (!weaponAimed) {
-			weaponPiece = owner->script->QueryWeapon(weaponNum);
-		} else {
-			weaponPiece = owner->script->AimFromWeapon(weaponNum);
-		}
-
-		relWeaponMuzzlePos = owner->script->GetPiecePos(weaponPiece);
-
-		if (!weaponAimed) {
-			weaponPiece = owner->script->AimFromWeapon(weaponNum);
-		}
-
-		relWeaponPos = owner->script->GetPiecePos(weaponPiece);
+		UpdateRelWeaponPos();
 	}
 
 	if (targetType == Target_Unit) {
@@ -279,7 +299,7 @@ void CWeapon::Update()
 		targetPos.y = std::max(targetPos.y, ground->GetApproximateHeight(targetPos.x, targetPos.z) + 2.0f);
 
 		if (!weaponDef->waterweapon) {
-			targetPos.y = std::max(targetPos.y, 1.0f);
+			targetPos.y = std::max(targetPos.y, 0.0f);
 		}
 	}
 
@@ -340,29 +360,11 @@ void CWeapon::Update()
 			owner->script->AimWeapon(weaponNum, ClampRad(heading - owner->heading * TAANG2RAD), pitch);
 		}
 	}
+}
 
-	if (weaponDef->stockpile && numStockpileQued) {
-		const float p = 1.0f / stockpileTime;
 
-		if (teamHandler->Team(owner->team)->metal >= metalFireCost*p && teamHandler->Team(owner->team)->energy >= energyFireCost*p) {
-			owner->UseEnergy(energyFireCost * p);
-			owner->UseMetal(metalFireCost * p);
-			buildPercent += p;
-		} else {
-			// update the energy and metal required counts
-			teamHandler->Team(owner->team)->energyPull += energyFireCost * p;
-			teamHandler->Team(owner->team)->metalPull += metalFireCost * p;
-		}
-		if (buildPercent >= 1) {
-			const int oldCount = numStockpiled;
-			buildPercent=0;
-			numStockpileQued--;
-			numStockpiled++;
-			owner->commandAI->StockpileChanged(this);
-			eventHandler.StockpileChanged(owner, this, oldCount);
-		}
-	}
-
+void CWeapon::UpdateFire()
+{
 	bool canFire = true;
 	const CPlayer* fpsPlayer = owner->fpsControlPlayer;
 
@@ -372,7 +374,7 @@ void CWeapon::Update()
 	canFire = canFire && (salvoLeft == 0);
 	canFire = canFire && (targetType != Target_None);
 	canFire = canFire && (reloadStatus <= gs->frameNum);
-	canFire = canFire && (!weaponDef->stockpile || numStockpiled);
+	canFire = canFire && (!weaponDef->stockpile || (numStockpiled > 0));
 	canFire = canFire && (weaponDef->fireSubmersed || (weaponMuzzlePos.y > 0));
 	canFire = canFire && ((fpsPlayer == NULL)
 		 || fpsPlayer->fpsController.mouse1
@@ -391,12 +393,11 @@ void CWeapon::Update()
 			weaponMuzzlePos = owner->pos + owner->frontdir * relWeaponMuzzlePos.z +
 			                               owner->updir    * relWeaponMuzzlePos.y +
 			                               owner->rightdir * relWeaponMuzzlePos.x;
-			useWeaponPosForAim = reloadTime / 16 + 8;
 			weaponDir = owner->frontdir * weaponDir.z +
 			            owner->updir    * weaponDir.y +
 			            owner->rightdir * weaponDir.x;
-
 			weaponDir.SafeNormalize();
+			useWeaponPosForAim = reloadTime / 16 + 8;
 
 			if (TryTarget(targetPos, haveUserTarget, targetUnit) && !CobBlockShot(targetUnit)) {
 				if (weaponDef->stockpile) {
@@ -426,7 +427,7 @@ void CWeapon::Update()
 				owner->script->FireWeapon(weaponNum);
 			}
 		} else {
-			if (TryTarget(targetPos, haveUserTarget, targetUnit) && !weaponDef->stockpile) {
+			if (!weaponDef->stockpile && TryTarget(targetPos, haveUserTarget, targetUnit)) {
 				// update the energy and metal required counts
 				const int minPeriod = std::max(1, (int)(reloadTime / owner->reloadSpeed));
 				const float averageFactor = 1.0f / (float)minPeriod;
@@ -435,7 +436,37 @@ void CWeapon::Update()
 			}
 		}
 	}
+}
 
+
+void CWeapon::UpdateStockpile()
+{
+	if (weaponDef->stockpile && numStockpileQued) {
+		const float p = 1.0f / stockpileTime;
+
+		if (teamHandler->Team(owner->team)->metal >= metalFireCost*p && teamHandler->Team(owner->team)->energy >= energyFireCost*p) {
+			owner->UseEnergy(energyFireCost * p);
+			owner->UseMetal(metalFireCost * p);
+			buildPercent += p;
+		} else {
+			// update the energy and metal required counts
+			teamHandler->Team(owner->team)->energyPull += energyFireCost * p;
+			teamHandler->Team(owner->team)->metalPull += metalFireCost * p;
+		}
+		if (buildPercent >= 1) {
+			const int oldCount = numStockpiled;
+			buildPercent=0;
+			numStockpileQued--;
+			numStockpiled++;
+			owner->commandAI->StockpileChanged(this);
+			eventHandler.StockpileChanged(owner, this, oldCount);
+		}
+	}
+}
+
+
+void CWeapon::UpdateSalvo()
+{
 	if (salvoLeft && nextSalvo <= gs->frameNum) {
 		salvoLeft--;
 		nextSalvo = gs->frameNum + salvoDelay;
@@ -454,7 +485,7 @@ void CWeapon::Update()
 			int piece = owner->script->AimFromWeapon(weaponNum);
 			relWeaponPos = owner->script->GetPiecePos(piece);
 
-			piece = owner->script->/*AimFromWeapon*/QueryWeapon(weaponNum);
+			piece = owner->script->QueryWeapon(weaponNum);
 			owner->script->GetEmitDirPos(piece, relWeaponMuzzlePos, weaponDir);
 
 			weaponPos = owner->pos +
@@ -496,11 +527,6 @@ void CWeapon::Update()
 		if (salvoLeft == 0) {
 			owner->script->EndBurst(weaponNum);
 		}
-
-#ifdef TRACE_SYNC
-	tracefile << __FUNCTION__;
-	tracefile << weaponPos.x << " " << weaponPos.y << " " << weaponPos.z << " " << targetPos.x << " " << targetPos.y << " " << targetPos.z << "\n";
-#endif
 	}
 }
 
@@ -514,8 +540,8 @@ bool CWeapon::AttackGround(float3 newTargetPos, bool isUserTarget)
 	}
 
 	// keep target positions on the surface if this weapon hates water
-	if (!weaponDef->waterweapon && (newTargetPos.y < 1.0f)) {
-		newTargetPos.y = 1.0f;
+	if (!weaponDef->waterweapon) {
+		newTargetPos.y = std::max(newTargetPos.y, 0.0f);
 	}
 
 	weaponMuzzlePos =
@@ -640,7 +666,7 @@ void CWeapon::HoldFire()
 
 
 
-inline bool CWeapon::AllowWeaponTargetCheck()
+bool CWeapon::AllowWeaponTargetCheck()
 {
 	if (luaRules != NULL) {
 		const int checkAllowed = luaRules->AllowWeaponTargetCheck(owner->id, weaponNum, weaponDef->id);
@@ -776,22 +802,9 @@ void CWeapon::SlowUpdate(bool noAutoTargetOverride)
 	tracefile << owner->id << " " << weaponNum <<  "\n";
 #endif
 
-	// If we can't get a line of fire from the muzzle, try
-	// the aim piece instead (since the weapon may just be
-	// turned in a wrong way)
-	int weaponPiece = -1;
-	bool weaponAimed = (useWeaponPosForAim == 0);
+	UpdateRelWeaponPos();
+	useWeaponPosForAim = std::max(0, useWeaponPosForAim - 1);
 
-	if (!weaponAimed) {
-		weaponPiece = owner->script->QueryWeapon(weaponNum);
-
-		if (useWeaponPosForAim > 1)
-			useWeaponPosForAim--;
-	} else {
-		weaponPiece = owner->script->AimFromWeapon(weaponNum);
-	}
-
-	relWeaponMuzzlePos = owner->script->GetPiecePos(weaponPiece);
 	weaponMuzzlePos =
 		owner->pos +
 		owner->frontdir * relWeaponMuzzlePos.z +
@@ -802,12 +815,6 @@ void CWeapon::SlowUpdate(bool noAutoTargetOverride)
 		owner->frontdir * relWeaponPos.z +
 		owner->updir    * relWeaponPos.y +
 		owner->rightdir * relWeaponPos.x;
-
-	if (!weaponAimed) {
-		weaponPiece = owner->script->AimFromWeapon(weaponNum);
-	}
-
-	relWeaponPos = owner->script->GetPiecePos(weaponPiece);
 
 	if (weaponMuzzlePos.y < ground->GetHeightReal(weaponMuzzlePos.x, weaponMuzzlePos.z)) {
 		// hope that we are underground because we are a popup weapon and will come above ground later
@@ -879,7 +886,7 @@ void CWeapon::SlowUpdate(bool noAutoTargetOverride)
 
 	if (targetType == Target_None) {
 		// if we can't target anything, try switching aim point
-		useWeaponPosForAim = 1 - useWeaponPosForAim;
+		useWeaponPosForAim = std::max(0, useWeaponPosForAim - 1);
 	}
 }
 
@@ -903,10 +910,19 @@ void CWeapon::DependentDied(CObject* o)
 	}
 }
 
-bool CWeapon::TargetUnitOrPositionInWater(const float3& targetPos, const CUnit* targetUnit) const
+bool CWeapon::TargetUnitOrPositionInUnderWater(const float3& targetPos, const CUnit* targetUnit)
 {
 	if (targetUnit != NULL) {
 		return (targetUnit->isUnderWater);
+	} else {
+		return (targetPos.y < 0.0f);
+	}
+}
+
+bool CWeapon::TargetUnitOrPositionInWater(const float3& targetPos, const CUnit* targetUnit)
+{
+	if (targetUnit != NULL) {
+		return (targetUnit->inWater);
 	} else {
 		return (targetPos.y < 0.0f);
 	}
@@ -1046,7 +1062,7 @@ bool CWeapon::GetTargetBorderPos(const CUnit* targetUnit, const float3& rawTarge
 	return (rawTargetDir.SqLength() == 1.0f);
 }
 
-bool CWeapon::TryTarget(const float3& tgtPos, bool userTarget, CUnit* targetUnit) const
+bool CWeapon::TryTarget(const float3& tgtPos, bool userTarget, const CUnit* targetUnit) const
 {
 	if (!TestTarget(tgtPos, userTarget, targetUnit))
 		return false;
@@ -1062,7 +1078,7 @@ bool CWeapon::TryTarget(const float3& tgtPos, bool userTarget, CUnit* targetUnit
 // if targetUnit != NULL, this checks our onlyTargetCategory against unit->category
 // etc. as well as range, otherwise the only concern is range and angular difference
 // (terrain is NOT checked here, HaveFreeLineOfFire does that)
-bool CWeapon::TestTarget(const float3& tgtPos, bool /*userTarget*/, CUnit* targetUnit) const
+bool CWeapon::TestTarget(const float3& tgtPos, bool /*userTarget*/, const CUnit* targetUnit) const
 {
 	ASSERT_SINGLETHREADED_SIM();
 
@@ -1075,7 +1091,7 @@ bool CWeapon::TestTarget(const float3& tgtPos, bool /*userTarget*/, CUnit* targe
 	}
 
 	// test: ground/water -> water
-	if (!weaponDef->waterweapon && TargetUnitOrPositionInWater(tgtPos, targetUnit))
+	if (!weaponDef->waterweapon && TargetUnitOrPositionInUnderWater(tgtPos, targetUnit))
 		return false;
 
 	// test: water -> *
@@ -1091,15 +1107,10 @@ bool CWeapon::TestTarget(const float3& tgtPos, bool /*userTarget*/, CUnit* targe
 		return false;
 	}
 
-	//XXX: wrong place for this check?
-	if (weaponDef->stockpile && !numStockpiled) {
-		return false;
-	}
-
 	return true;
 }
 
-bool CWeapon::TestRange(const float3& tgtPos, bool /*userTarget*/, CUnit* targetUnit) const
+bool CWeapon::TestRange(const float3& tgtPos, bool /*userTarget*/, const CUnit* targetUnit) const
 {
 	float3 tmpTargetPos = tgtPos;
 	float3 tmpTargetVec = tmpTargetPos - weaponMuzzlePos;
@@ -1134,7 +1145,7 @@ bool CWeapon::TestRange(const float3& tgtPos, bool /*userTarget*/, CUnit* target
 }
 
 
-bool CWeapon::HaveFreeLineOfFire(const float3& pos, bool userTarget, CUnit* unit) const
+bool CWeapon::HaveFreeLineOfFire(const float3& pos, bool userTarget, const CUnit* unit) const
 {
 	float3 dir = pos - weaponMuzzlePos;
 	float length = dir.Length();
@@ -1155,7 +1166,7 @@ bool CWeapon::HaveFreeLineOfFire(const float3& pos, bool userTarget, CUnit* unit
 		const float3 gpos = weaponMuzzlePos + dir * g;
 
 		// true iff ground does not block the ray of length <length> from <pos> along <dir>
-		if (g > 0.0f && gpos.SqDistance(pos) > Square(damageAreaOfEffect))
+		if ((g > 0.0f) && (gpos.SqDistance(pos) > Square(damageAreaOfEffect)))
 			return false;
 	}
 
@@ -1202,8 +1213,8 @@ bool CWeapon::TryTargetRotate(float3 pos, bool userTarget) {
 		return false;
 	}
 
-	if (!weaponDef->waterweapon && pos.y < 1) {
-		pos.y = 1;
+	if (!weaponDef->waterweapon) {
+		pos.y = std::max(pos.y, 0.0f);
 	}
 
 	const short weaponHeading = GetHeadingFromVector(mainDir.x, mainDir.z);

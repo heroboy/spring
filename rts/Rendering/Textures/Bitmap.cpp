@@ -176,15 +176,13 @@ bool CBitmap::Load(std::string const& filename, unsigned char defaultAlpha)
 
 	if (filename.find(".dds") != std::string::npos) {
 #ifndef BITMAP_NO_OPENGL
-		bool status = false;
-
 		type = BitmapTypeDDS;
 		xsize = 0;
 		ysize = 0;
 		channels = 0;
 
 		ddsimage = new nv_dds::CDDSImage();
-		status = ddsimage->load(filename);
+		bool status = ddsimage->load(filename);
 
 		if (status) {
 			xsize = ddsimage->get_width();
@@ -618,7 +616,9 @@ void CBitmap::Blur(int iterations, float weight)
 	for (int i=0; i < iterations; ++i){
 		{
 			int j,y,x;
-			#pragma omp parallel for private(j,x,y)
+//			Threading::OMPCheck();
+//			This is currently used too early, OMP is not initialized here
+//			#pragma omp parallel for private(j,x,y)
 			for (y=0; y < ysize; y++) {
 				for (x=0; x < xsize; x++) {
 					for (j=0; j < channels; j++) {

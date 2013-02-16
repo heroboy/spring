@@ -37,15 +37,6 @@
 #include "System/Log/ILog.h"
 #include "System/Util.h"
 
-bool distcmp::operator() (const CProjectile* arg1, const CProjectile* arg2) const {
-	if (arg1->tempdist != arg2->tempdist) // strict ordering required
-		return (arg1->tempdist > arg2->tempdist);
-	return (arg1 > arg2);
-}
-
-
-
-
 
 
 CProjectileDrawer* projectileDrawer = NULL;
@@ -607,7 +598,7 @@ void CProjectileDrawer::DrawFlyingPieces(int modelType, int numFlyingPieces, int
 		size_t lastTeam = -1;
 
 		for (fpi = container->render_begin(); fpi != container->render_end(); ++fpi) {
-			(*fpi)->Draw(modelType, &lastTeam, &lastTex, va);
+			(*fpi)->Draw(&lastTeam, &lastTex, va);
 		}
 
 		(*drawnPieces) += (va->drawIndex() / 32);
@@ -666,7 +657,7 @@ void CProjectileDrawer::Draw(bool drawReflection, bool drawRefraction) {
 		CProjectile::va->Initialize();
 
 		// draw the particle effects
-		for (std::set<CProjectile*, distcmp>::iterator it = zSortedProjectiles.begin(); it != zSortedProjectiles.end(); ++it) {
+		for (std::set<CProjectile*, ProjectileDistanceComparator>::iterator it = zSortedProjectiles.begin(); it != zSortedProjectiles.end(); ++it) {
 			(*it)->Draw();
 		}
 	}
@@ -762,7 +753,7 @@ bool CProjectileDrawer::DrawProjectileModel(const CProjectile* p, bool shadowPas
 		#define SET_TRANSFORM_VECTORS(dir)           \
 			float3 rightdir, updir;                  \
                                                      \
-			if (math::fabs(dir.y) < 0.95f) {               \
+			if (math::fabs(dir.y) < 0.95f) {         \
 				rightdir = dir.cross(UpVector);      \
 				rightdir.SafeANormalize();           \
 			} else {                                 \
@@ -771,10 +762,10 @@ bool CProjectileDrawer::DrawProjectileModel(const CProjectile* p, bool shadowPas
                                                      \
 			updir = rightdir.cross(dir);
 
-		#define TRANSFORM_DRAW(mat)                                \
-			glPushMatrix();                                        \
-				glMultMatrixf(mat);                                \
-				glCallList(wp->model->GetRootPiece()->dispListID); \
+		#define TRANSFORM_DRAW(mat)                                        \
+			glPushMatrix();                                                \
+				glMultMatrixf(mat);                                        \
+				glCallList(wp->model->GetRootPiece()->GetDisplayListID()); \
 			glPopMatrix();
 
 		switch (wp->GetProjectileType()) {

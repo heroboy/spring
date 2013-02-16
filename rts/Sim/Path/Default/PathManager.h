@@ -27,7 +27,7 @@ public:
 	boost::uint32_t GetPathCheckSum() const;
 
 	void Update(ST_FUNC int unused = 0);
-	void UpdateFull();
+	void UpdateFull(ST_FUNC int unused = 0);
 	void UpdatePath(ST_FUNC const CSolidObject*, unsigned int);
 	void DeletePath(ST_FUNC unsigned int pathID);
 	void MergePathCaches();
@@ -35,22 +35,22 @@ public:
 
 	float3 NextWayPoint(
 		ST_FUNC
+		const CSolidObject* owner,
 		unsigned int pathID,
+		unsigned int numRetries,
 		float3 callerPos,
-		float minDistance = 0.0f,
-		int numRetries = 0,
-		const CSolidObject* owner = NULL,
-		bool synced = true
+		float radius,
+		bool synced
 	);
 
 	unsigned int RequestPath(
 		ST_FUNC
+		CSolidObject* caller,
 		const MoveDef* moveDef,
 		const float3& startPos,
 		const float3& goalPos,
-		float goalRadius = 8.0f,
-		CSolidObject* caller = 0,
-		bool synced = true
+		float goalRadius,
+		bool synced
 	);
 
 	/**
@@ -81,7 +81,7 @@ public:
 	float GetNodeExtraCost(ST_FUNC unsigned int, unsigned int, bool) const;
 	const float* GetNodeExtraCosts(ST_FUNC bool) const;
 
-	void GetNumOutstandingEstimatorUpdates(unsigned int* data) const;
+	int2 GetNumQueuedUpdates() const;
 
 private:
 	unsigned int RequestPath(

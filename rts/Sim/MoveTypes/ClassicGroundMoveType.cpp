@@ -54,7 +54,7 @@ void CClassicGroundMoveType::StartMoving(float3, float, float) {}
 void CClassicGroundMoveType::StopMoving() {}
 void CClassicGroundMoveType::KeepPointingTo(float3, float, bool) {}
 void CClassicGroundMoveType::KeepPointingTo(CUnit*, float, bool) {}
-void CClassicGroundMoveType::ImpulseAdded() {}
+bool CClassicGroundMoveType::CanApplyImpulse() { return false; }
 void CClassicGroundMoveType::SetMaxSpeed(float) {}
 void CClassicGroundMoveType::LeaveTransport() {}
 
@@ -472,10 +472,10 @@ void CClassicGroundMoveType::ChangeHeading(short wantedHeading) {
 	flatFrontDir.Normalize();
 }
 
-void CClassicGroundMoveType::ImpulseAdded()
+bool CClassicGroundMoveType::CanApplyImpulse()
 {
 	if (owner->beingBuilt || owner->moveDef->moveFamily == MoveDef::Ship)
-		return;
+		return false;
 
 	float3& impulse = owner->residualImpulse;
 	float3& speed = owner->speed;
@@ -513,6 +513,8 @@ void CClassicGroundMoveType::ImpulseAdded()
 			skidRotSpeed2 = (gs->randFloat(owner) - 0.5f) * 0.04f;
 		}
 	}
+
+	return true;
 }
 
 void CClassicGroundMoveType::UpdateSkid()
@@ -919,7 +921,7 @@ void CClassicGroundMoveType::GetNewPath()
 	}
 
 	pathManager->DeletePath(pathId);
-	pathId = pathManager->RequestPath(owner->moveDef, owner->pos, goalPos, goalRadius, owner);
+	pathId = pathManager->RequestPath(owner, owner->moveDef, owner->pos, goalPos, goalRadius, true);
 
 	nextWaypoint = owner->pos;
 
@@ -937,7 +939,7 @@ void CClassicGroundMoveType::GetNextWayPoint()
 {
 	if (pathId != 0) {
 		waypoint = nextWaypoint;
-		nextWaypoint = pathManager->NextWayPoint(pathId, waypoint, 1.25f*SQUARE_SIZE, 0, owner);
+		nextWaypoint = pathManager->NextWayPoint(owner, pathId, 0, waypoint, 1.25f * SQUARE_SIZE, true);
 
 		if (nextWaypoint.x != -1) {
 			etaWaypoint = int(30.0f / (requestedSpeed * terrainSpeed + 0.001f)) + gs->frameNum + 50;

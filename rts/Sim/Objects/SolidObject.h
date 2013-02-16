@@ -132,6 +132,21 @@ public:
 
 	virtual bool AddBuildPower(float amount, CUnit* builder) { return false; }
 	virtual void DoDamage(const DamageArray& damages, const float3& impulse, CUnit* attacker, int weaponDefID) {}
+
+	virtual void StoreImpulse(const float3& impulse, float newImpulseDecayRate) {
+		if ((impulseDecayRate = std::min(std::max(newImpulseDecayRate, 0.0f), 1.0f)) > 0.0f) {
+			StoreImpulse(impulse);
+		}
+	}
+
+	virtual void StoreImpulse(const float3& impulse) {
+		residualImpulse += impulse;
+	}
+	virtual void ApplyImpulse() {
+		speed += residualImpulse;
+		residualImpulse = ZeroVector;
+	}
+
 	virtual void Kill(const float3& impulse, bool crushKill);
 	virtual int GetBlockingMapID() const { return -1; }
 
@@ -223,6 +238,7 @@ public:
 	float health;
 	float mass;                                 ///< the physical mass of this object (run-time constant)
 	float crushResistance;                      ///< how much MoveDef::crushStrength is required to crush this object (run-time constant)
+	float impulseDecayRate;                     ///< multiplier decaying this object's (residual) impulse each frame
 
 	bool blocking;                              ///< if this object can be collided with at all (NOTE: Some objects could be flat => not collidable.)
 	bool crushable;                             ///< whether this object can potentially be crushed during a collision with another object
@@ -247,7 +263,7 @@ public:
 	float3 groundBlockPos;
 
 	float3 speed;                               ///< current velocity vector (length in elmos/frame)
-	float3 residualImpulse;                     ///< Used to sum up external impulses.
+	float3 residualImpulse;                     ///< Used to sum up external impulses. TODO: remove this, impulse is ALWAYS applied immediately now
 
 	int team;                                   ///< team that "owns" this object
 	int allyteam;                               ///< allyteam that this->team is part of
@@ -356,6 +372,7 @@ public:
 	static const float DEFAULT_MASS;
 	static const float MINIMUM_MASS;
 	static const float MAXIMUM_MASS;
+	static const float IMPULSE_RATE;
 
 	static int deletingRefID;
 	static void SetDeletingRefID(int id) { deletingRefID = id; }

@@ -7,7 +7,6 @@
 #include "Game/GlobalUnsynced.h"
 #include "Game/TraceRay.h"
 #include "Map/Ground.h"
-#include "Map/MapInfo.h"
 #include "Rendering/GlobalRendering.h"
 #include "Rendering/GroundFlash.h"
 #include "Sim/Features/Feature.h"
@@ -69,18 +68,6 @@ CR_REG_METADATA(CProjectileHandler, (
 	CR_POSTLOAD(PostLoad)
 ));
 
-
-
-// need this for AddFlyingPiece
-bool piececmp::operator() (const FlyingPiece* fp1, const FlyingPiece* fp2) const {
-	if (fp1->texture != fp2->texture)
-		return (fp1->texture > fp2->texture);
-	if (fp1->team != fp2->team)
-		return (fp1->team > fp2->team);
-	return (fp1 > fp2);
-}
-
-void projdetach::Detach(CProjectile *p) { p->Detach(); }
 
 
 //////////////////////////////////////////////////////////////////////
@@ -200,6 +187,7 @@ void CProjectileHandler::UpdateProjectileContainer(ProjectileContainer& pc, bool
 				pIt = syncedProjectileIDs.find(p->id);
 
 				eventHandler.ProjectileDestroyed((pIt->second).first, (pIt->second).second);
+				syncedRenderProjectileIDs.erase_delete(p);
 				syncedProjectileIDs.erase(pIt);
 
 				freeSyncedIDs.push_back(p->id);
@@ -213,15 +201,12 @@ void CProjectileHandler::UpdateProjectileContainer(ProjectileContainer& pc, bool
 				pIt = unsyncedProjectileIDs.find(p->id);
 
 				eventHandler.ProjectileDestroyed((pIt->second).first, (pIt->second).second);
+				unsyncedRenderProjectileIDs.erase_delete(p);
 				unsyncedProjectileIDs.erase(pIt);
 
 				freeUnsyncedIDs.push_back(p->id);
 #endif
-#if DETACH_SYNCED
 				pci = pc.erase_detach(pci);
-#else
-				pci = pc.erase_delete(pci);
-#endif
 			}
 		} else {
 			PROJECTILE_SANITY_CHECK(p);
@@ -254,19 +239,18 @@ void CProjectileHandler::Update()
 		{
 			GML_STDMUTEX_LOCK(rproj); // Update
 
-			if (syncedProjectiles.can_delete_synced()) {
-#if !DETACH_SYNCED
-				GML_RECMUTEX_LOCK(proj); // Update
+			syncedRenderProjectileIDs.delay_delete();
+			syncedRenderProjectileIDs.delay_add();
+#if !UNSYNCED_PROJ_NOEVENT
+			unsyncedRenderProjectileIDs.delay_delete();
+			unsyncedRenderProjectileIDs.delay_add();
 #endif
 
+			if (syncedProjectiles.can_delete_synced()) {
 				eventHandler.DeleteSyncedProjectiles();
 				//! delete all projectiles that were
 				//! queued (push_back'ed) for deletion
-#if DETACH_SYNCED
 				syncedProjectiles.detach_erased_synced();
-#else
-				syncedProjectiles.delete_erased_synced();
-#endif
 			}
 
 			eventHandler.UpdateProjectiles();
@@ -291,21 +275,16 @@ void CProjectileHandler::Update()
 			groundFlashes.delay_add();
 		}
 
-		#define UPDATE_FLYING_PIECES(fpContainer)                                        \
-			FlyingPieceContainer::iterator pti = fpContainer.begin();                    \
-                                                                                         \
-			while (pti != fpContainer.end()) {                                           \
-				FlyingPiece* p = *pti;                                                   \
-				p->pos     += p->speed;                                                  \
-				p->speed   *= 0.996f;                                                    \
-				p->speed.y += mapInfo->map.gravity; /* fp's are not projectiles */       \
-				p->rot     += p->rotSpeed;                                               \
-                                                                                         \
-				if (p->pos.y < ground->GetApproximateHeight(p->pos.x, p->pos.z - 10)) {  \
-					pti = fpContainer.erase_delete_set(pti);                             \
-				} else {                                                                 \
-					++pti;                                                               \
-				}                                                                        \
+		#define UPDATE_FLYING_PIECES(fpContainer)                      \
+			FlyingPieceContainer::iterator pti = fpContainer.begin();  \
+                                                                       \
+			while (pti != fpContainer.end()) {                         \
+				FlyingPiece* p = *pti;                                 \
+				if (!p->Update()) {                                    \
+					pti = fpContainer.erase_delete_set(pti);           \
+				} else {                                               \
+					++pti;                                             \
+				}                                                      \
 			}
 
 		{ UPDATE_FLYING_PIECES(flyingPieces3DO); }
@@ -331,14 +310,17 @@ void CProjectileHandler::AddProjectile(CProjectile* p)
 	assert(p->id < 0);
 	
 	std::list<int>* freeIDs = NULL;
-	std::map<int, ProjectileMapPair>* proIDs = NULL;
+	ProjectileMap* proIDs = NULL;
+	ProjectileRenderMap* newProIDs = NULL;
+
 	int* maxUsedID = NULL;
-	int newID = 0;
+	int newUsedID = 0;
 
 	if (p->synced) {
 		syncedProjectiles.push(p);
 		freeIDs = &freeSyncedIDs;
 		proIDs = &syncedProjectileIDs;
+		newProIDs = &syncedRenderProjectileIDs;
 		maxUsedID = &maxUsedSyncedID;
 
 		ASSERT_SYNCED(*maxUsedID);
@@ -351,15 +333,16 @@ void CProjectileHandler::AddProjectile(CProjectile* p)
 #endif
 		freeIDs = &freeUnsyncedIDs;
 		proIDs = &unsyncedProjectileIDs;
+		newProIDs = &unsyncedRenderProjectileIDs;
 		maxUsedID = &maxUsedUnsyncedID;
 	}
 
 	if (!freeIDs->empty()) {
-		newID = freeIDs->front();
+		newUsedID = freeIDs->front();
 		freeIDs->pop_front();
 	} else {
 		(*maxUsedID)++;
-		newID = *maxUsedID;
+		newUsedID = *maxUsedID;
 	}
 
 	if ((*maxUsedID) > (1 << 24)) {
@@ -367,15 +350,18 @@ void CProjectileHandler::AddProjectile(CProjectile* p)
 	}
 	
 	if (p->synced) {
-		ASSERT_SYNCED(newID);
+		ASSERT_SYNCED(newUsedID);
 	}
 
-	ProjectileMapPair pp(p, p->owner() ? p->owner()->allyteam : -1);
+	p->id = newUsedID;
 
-	p->id = newID;
-	(*proIDs)[p->id] = pp;
+	const ProjectileMapValPair vp(p, p->owner() ? p->owner()->allyteam : -1);
+	const ProjectileMapKeyPair kp(p->id, vp);
 
-	eventHandler.ProjectileCreated(pp.first, pp.second);
+	proIDs->insert(kp);
+	newProIDs->push(p, vp);
+
+	eventHandler.ProjectileCreated(vp.first, vp.second);
 }
 
 
@@ -539,18 +525,27 @@ void CProjectileHandler::AddGroundFlash(CGroundFlash* flash)
 }
 
 
-void CProjectileHandler::AddFlyingPiece(int team, float3 pos, float3 speed, const S3DOPiece* object, const S3DOPrimitive* piece)
+void CProjectileHandler::AddFlyingPiece(
+	const float3& pos,
+	const float3& speed,
+	int team,
+	const S3DOPiece* piece,
+	const S3DOPrimitive* chunk)
 {
-	FlyingPiece* fp = new FlyingPiece(team, pos, speed, object, piece);
+	FlyingPiece* fp = new S3DOFlyingPiece(pos, speed, team, piece, chunk);
 	flyingPieces3DO.insert(fp);
 }
 
-void CProjectileHandler::AddFlyingPiece(int textureType, int team, float3 pos, float3 speed, SS3OVertex* verts)
+void CProjectileHandler::AddFlyingPiece(
+	const float3& pos,
+	const float3& speed,
+	int team,
+	int textureType,
+	const SS3OVertex* chunk)
 {
-	if (textureType <= 0)
-		return; // texture 0 means 3do
+	assert(textureType > 0);
 
-	FlyingPiece* fp = new FlyingPiece(team, pos, speed, textureType, verts);
+	FlyingPiece* fp = new SS3OFlyingPiece(pos, speed, team, textureType, chunk);
 	flyingPiecesS3O.insert(fp);
 }
 
@@ -621,3 +616,18 @@ void CProjectileHandler::AddNanoParticle(
 		new CGfxProjectile(startPos, (dif + error) * 3, int(l / 3), color);
 	}
 }
+
+bool CProjectileHandler::RenderAccess(const CProjectile* p) const {
+	const ProjectileMap* pmap = NULL;
+
+	if (p->synced) {
+		pmap = &(syncedRenderProjectileIDs.get_render_map());
+	} else {
+		#ifndef UNSYNCED_PROJ_NOEVENT
+		pmap = &(unsyncedRenderProjectileIDs.get_render_map());
+		#endif
+	}
+
+	return (pmap != NULL && pmap->find(p->id) != pmap->end());
+}
+

@@ -36,6 +36,7 @@ namespace Threading {
 	NativeThreadId GetCurrentThreadId();
 	inline bool NativeThreadIdsEqual(const NativeThreadId thID1, const NativeThreadId thID2);
 
+
 	/**
 	 * Sets the affinity of the current thread
 	 *
@@ -43,6 +44,7 @@ namespace Threading {
 	 * are numbered logically from 1 to N) we want to run.
 	 * Note: that this approach will fail when N > 32.
 	 */
+	void DetectCores();
 	boost::uint32_t SetAffinity(boost::uint32_t cores_bitmask, bool hard = true);
 	void SetAffinityHelper(const char *threadName, boost::uint32_t affinity);
 	unsigned GetAvailableCores();
@@ -54,6 +56,15 @@ namespace Threading {
 	inline unsigned SimThreadCount() { return simThreadCount; }
 
 	boost::uint32_t GetAvailableCoresMask();
+
+
+	/**
+	 * OpenMP related stuff
+	 */
+	void InitOMP(bool useOMP);
+	void OMPError();
+	extern bool OMPInited;
+	inline void OMPCheck();
 
 	/**
 	 * Inform the OS kernel that we are a cpu-intensive task
@@ -137,6 +148,13 @@ namespace Threading {
 		return (thID1 == thID2);
 	#else
 		return pthread_equal(thID1, thID2);
+	#endif
+	}
+
+	void OMPCheck() {
+	#ifndef NDEBUG
+		if (!OMPInited)
+			OMPError();
 	#endif
 	}
 

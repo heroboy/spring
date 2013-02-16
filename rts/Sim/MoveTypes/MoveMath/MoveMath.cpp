@@ -195,47 +195,18 @@ bool CMoveMath::CrushResistant(const MoveDef& colliderMD, const CSolidObject* co
  */
 bool CMoveMath::IsNonBlocking(const MoveDef& colliderMD, const CSolidObject* collidee, const CSolidObject* collider)
 {
-	if (!collidee->StableBlocking())
+	if (collider == collidee)
 		return true;
 
-	if (collider == collidee)
+	if (collider != NULL)
+		return IsNonBlocking(collidee, collider->moveDef, collider->StablePos(), collider->StableHeight());
+
+	if (!collidee->StableBlocking())
 		return true;
 
 	// if obstacle is out of map bounds, it cannot block us
 	if (!collidee->StablePos().IsInBounds())
 		return true;
-
-	// if unit is restricted to land with height > 0,
-	// it can not be blocked by underwater obstacles
-	if (colliderMD.terrainClass == MoveDef::Land)
-		return (collidee->StableUnderWater());
-
-	// some objects appear to have negative model heights
-	// (the model parsers allow it for some reason), take
-	// absolute values to prevent them from being regarded
-	// as non-blocking
-	const float colliderMdlHgt = (collider != NULL)? math::fabs(collider->StableHeight()): 1e6;
-	const float collideeMdlHgt =                     math::fabs(collidee->StableHeight());
-	const float colliderGndAlt = (collider != NULL)? collider->StablePos().y: 1e6f;
-	const float collideeGndAlt =                     collidee->StablePos().y;
-
-	if (collider != NULL) {
-		// simple case: if unit and obstacle have non-zero
-		// vertical separation as measured by their (model)
-		// heights, unit can always pass obstacle
-		//
-		// note: in many cases separation is not sufficient
-		// even when it logically should be (submarines vs.
-		// floating DT in shallow water eg.)
-		// note: if unit and obstacle are on a steep slope,
-		// this can return true even when their horizontal
-		// separation points to a collision
-		if (math::fabs(colliderGndAlt - collideeGndAlt) <= 1.0f) return false;
-		if ((colliderGndAlt + colliderMdlHgt) < collideeGndAlt) return true;
-		if ((collideeGndAlt + collideeMdlHgt) < colliderGndAlt) return true;
-
-		return false;
-	}
 
 	// (code below is only reachable from stand-alone PE invocations)
 	// remaining conditions under which obstacle does NOT block unit
@@ -256,6 +227,12 @@ bool CMoveMath::IsNonBlocking(const MoveDef& colliderMD, const CSolidObject* col
 	// owner would need to be accessible (but the path-estimator
 	// defs aren't tied to any)
 	//
+
+	const float colliderMdlHgt = 1e6;
+	const float collideeMdlHgt = math::fabs(collidee->StableHeight());
+	const float colliderGndAlt = 1e6f;
+	const float collideeGndAlt = collidee->StablePos().y;
+
 	if (colliderMD.followGround) {
 		const float collideeMinHgt = collideeGndAlt - collideeMdlHgt;
 		const float colliderMaxHgt = ground->GetHeightReal(collidee->StablePos().x, collidee->StablePos().z) + (SQUARE_SIZE >> 1);
@@ -277,6 +254,37 @@ bool CMoveMath::IsNonBlocking(const MoveDef& colliderMD, const CSolidObject* col
 	return false;
 }
 
+
+bool CMoveMath::IsNonBlocking(const CSolidObject* collidee, const MoveDef* colliderMD, const float3 colliderPos, const float colliderHeight)
+{
+	if (!collidee->StableBlocking())
+		return true;
+
+	// if obstacle is out of map bounds, it cannot block us
+	if (!collidee->StablePos().IsInBounds())
+		return true;
+
+	const float colliderMdlHgt = colliderHeight;
+	const float collideeMdlHgt = math::fabs(collidee->StableHeight());
+	const float colliderGndAlt = colliderPos.y;
+	const float collideeGndAlt = collidee->StablePos().y;
+
+	// simple case: if unit and obstacle have non-zero
+	// vertical separation as measured by their (model)
+	// heights, unit can always pass obstacle
+	//
+	// note: in many cases separation is not sufficient
+	// even when it logically should be (submarines vs.
+	// floating DT in shallow water eg.)
+	// note: if unit and obstacle are on a steep slope,
+	// this can return true even when their horizontal
+	// separation points to a collision
+	if (math::fabs(colliderGndAlt - collideeGndAlt) <= 1.0f) return false;
+	if ((colliderGndAlt + colliderMdlHgt) < collideeGndAlt) return true;
+	if ((collideeGndAlt + collideeMdlHgt) < colliderGndAlt) return true;
+
+	return false;
+}
 
 
 /* Check if a single square is accessable (for any object which uses the given MoveDef). */

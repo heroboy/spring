@@ -105,7 +105,6 @@
 #include "Sim/MoveTypes/MoveDefHandler.h"
 #include "Sim/MoveTypes/GroundMoveType.h"
 #include "Sim/Path/IPathManager.h"
-#include "Sim/Path/Default/PathManager.h"
 #include "Sim/Projectiles/ExplosionGenerator.h"
 #include "Sim/Projectiles/Projectile.h"
 #include "Sim/Projectiles/ProjectileHandler.h"
@@ -327,6 +326,7 @@ CGame::CGame(const std::string& mapName, const std::string& modName, ILoadSaveHa
 
 	modInfo.Init(modName.c_str());
 	GML::Init(); // modinfo plays key part in MT enable/disable
+	Threading::InitOMP(!GML::Enabled());
 	Threading::SetThreadScheduler();
 
 	if (!mapInfo) {
@@ -356,6 +356,7 @@ CGame::~CGame()
 		teamHandler->Team(t)->Died(false);
 	} 
 
+	CEndGameBox::Destroy();
 	CLoadScreen::DeleteInstance(); // make sure to halt loading, otherwise crash :)
 
 	// TODO move these to the end of this dtor, once all action-executors are registered by their respective engine sub-parts
@@ -519,7 +520,7 @@ void CGame::LoadDefs()
 		loadscreen->SetLoadMessage("Loading Sound Definitions");
 
 		sound->LoadSoundDefs("gamedata/sounds.lua");
-		chatSound = sound->GetSoundId("IncomingChat", false);
+		chatSound = sound->GetSoundId("IncomingChat");
 	}
 
 	LEAVE_SYNCED_CODE();
@@ -1233,18 +1234,21 @@ bool CGame::Draw() {
 
 		// 16ms := 60fps := 30simFPS + 30drawFPS
 		font->glFormat(0.03f, 0.07f, 0.7f, DBG_FONT_FLAGS, "avgFrame: %s%2.1fms\b avgDrawFrame: %s%2.1fms\b avgSimFrame: %s%2.1fms\b",
-		   (gu->avgFrameTime>30) ? "\xff\xff\x01\x01" : "", gu->avgFrameTime,
-		   (gu->avgDrawFrameTime>16) ? "\xff\xff\x01\x01" : "", gu->avgDrawFrameTime,
-		   (gu->avgSimFrameTime>16) ? "\xff\xff\x01\x01" : "", gu->avgSimFrameTime
+		   (gu->avgFrameTime     > 30) ? "\xff\xff\x01\x01" : "", gu->avgFrameTime,
+		   (gu->avgDrawFrameTime > 16) ? "\xff\xff\x01\x01" : "", gu->avgDrawFrameTime,
+		   (gu->avgSimFrameTime  > 16) ? "\xff\xff\x01\x01" : "", gu->avgSimFrameTime
 		);
 
-		if (pathManager->GetPathFinderType() == PFS_TYPE_DEFAULT) {
-			CPathManager* pm = static_cast<CPathManager*>(pathManager);
-			unsigned int peUpdates[2] = {0, 0};
+		const int2 pfsUpdates = pathManager->GetNumQueuedUpdates();
+		const char* fmtString = "[%s-PFS] queued updates: %i %i";
 
-			pm->GetNumOutstandingEstimatorUpdates(peUpdates);
-			font->glFormat(0.03f, 0.12f, 0.7f, DBG_FONT_FLAGS, "Outstanding Pathing Updates: %i %i",
-				peUpdates[0], peUpdates[1]);
+		switch (pathManager->GetPathFinderType()) {
+			case PFS_TYPE_DEFAULT: {
+				font->glFormat(0.03f, 0.12f, 0.7f, DBG_FONT_FLAGS, fmtString, "DEFAULT", pfsUpdates.x, pfsUpdates.y);
+			} break;
+			case PFS_TYPE_QTPFS: {
+				font->glFormat(0.03f, 0.12f, 0.7f, DBG_FONT_FLAGS, fmtString, "QT", pfsUpdates.x, pfsUpdates.y);
+			} break;
 		}
 
 		font->End();
@@ -1919,7 +1923,7 @@ void CGame::GameEnd(const std::vector<unsigned char>& winningAllyTeams, bool tim
 	gameOver = true;
 	eventHandler.GameOver(winningAllyTeams);
 
-	new CEndGameBox(winningAllyTeams);
+	CEndGameBox::Create(winningAllyTeams);
 #ifdef    HEADLESS
 	profiler.PrintProfilingInfo();
 #endif // HEADLESS
@@ -2051,14 +2055,15 @@ void CGame::HandleChatMsg(const ChatMessage& msg)
 			}
 		}
 		else if ((msg.destination < playerHandler->ActivePlayers()) && player)
-		{
-			if (msg.destination == gu->myPlayerNum && !player->spectator) {
+		{	// player -> spectators and spectator -> player PMs should be forbidden
+			// player <-> player and spectator <-> spectator are allowed
+			if (msg.destination == gu->myPlayerNum && player->spectator == gu->spectating) {
 				LOG("%sPrivate: %s", label.c_str(), s.c_str());
 				Channels::UserInterface.PlaySample(chatSound, 5);
 			}
 			else if (player->playerNum == gu->myPlayerNum)
 			{
-				LOG("You whispered %s: %s", player->name.c_str(), s.c_str());
+				LOG("You whispered %s: %s", playerHandler->Player(msg.destination)->name.c_str(), s.c_str());
 			}
 		}
 	}

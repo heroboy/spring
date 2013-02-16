@@ -7,18 +7,17 @@
 #include <list> // for QTPFS_STAGGERED_LAYER_UPDATES
 #include <boost/cstdint.hpp>
 
+#include "System/Rectangle.h"
 #include "PathDefines.hpp"
-#include "PathRectangle.hpp"
 
 struct MoveDef;
 
 namespace QTPFS {
-	struct PathRectangle;
 	struct INode;
 
 	#ifdef QTPFS_STAGGERED_LAYER_UPDATES
 	struct LayerUpdate {
-		PathRectangle rectangle;
+		SRectangle rectangle;
 
 		std::vector<float> speedMods;
 		std::vector<int  > blockBits;
@@ -32,6 +31,7 @@ namespace QTPFS {
 		typedef unsigned char SpeedModType;
 		typedef unsigned char SpeedBinType;
 
+		static void InitStatic();
 		static size_t MaxSpeedModTypeValue() { return (std::numeric_limits<SpeedModType>::max()); }
 		static size_t MaxSpeedBinTypeValue() { return (std::numeric_limits<SpeedBinType>::max()); }
 
@@ -41,22 +41,23 @@ namespace QTPFS {
 		void Clear();
 
 		#ifdef QTPFS_STAGGERED_LAYER_UPDATES
-		void QueueUpdate(const PathRectangle& r, const MoveDef* md);
+		void QueueUpdate(const SRectangle& r, const MoveDef* md);
 		void PopQueuedUpdate() { layerUpdates.pop_front(); }
 		bool ExecQueuedUpdate();
 		bool HaveQueuedUpdate() const { return (!layerUpdates.empty()); }
 		const LayerUpdate& GetQueuedUpdate() const { return (layerUpdates.front()); }
+		unsigned int NumQueuedUpdates() const { return (layerUpdates.size()); }
 		#endif
 
 		bool Update(
-			const PathRectangle& r,
+			const SRectangle& r,
 			const MoveDef* md,
 			const std::vector<float>* luSpeedMods = NULL,
 			const std::vector<  int>* luBlockBits = NULL
 		);
 
 		void ExecNodeNeighborCacheUpdate(unsigned int currFrameNum, unsigned int currMagicNum);
-		void ExecNodeNeighborCacheUpdates(const PathRectangle& ur, unsigned int currMagicNum);
+		void ExecNodeNeighborCacheUpdates(const SRectangle& ur, unsigned int currMagicNum);
 
 		float GetNodeRatio() const { return (numLeafNodes / std::max(1.0f, float(xsize * zsize))); }
 		const INode* GetNode(unsigned int x, unsigned int z) const { return nodeGrid[z * xsize + x]; }
@@ -78,6 +79,8 @@ namespace QTPFS {
 		float GetMaxRelSpeedMod() const { return maxRelSpeedMod; }
 		float GetAvgRelSpeedMod() const { return avgRelSpeedMod; }
 
+		SpeedBinType GetSpeedModBin(float absSpeedMod, float relSpeedMod) const;
+
 		boost::uint64_t GetMemFootPrint() const {
 			boost::uint64_t memFootPrint = sizeof(NodeLayer);
 			memFootPrint += (curSpeedMods.size() * sizeof(SpeedModType));
@@ -87,14 +90,6 @@ namespace QTPFS {
 			memFootPrint += (nodeGrid.size() * sizeof(INode*));
 			return memFootPrint;
 		}
-
-		// NOTE:
-		//   we need a fixed range that does not become wider / narrower
-		//   during terrain deformations (otherwise the bins would change
-		//   across ALL nodes)
-		static const unsigned int NUM_SPEEDMOD_BINS = 10;
-		static const float MIN_SPEEDMOD_VALUE;
-		static const float MAX_SPEEDMOD_VALUE;
 
 	private:
 		std::vector<INode*> nodeGrid;
@@ -107,6 +102,14 @@ namespace QTPFS {
 		#ifdef QTPFS_STAGGERED_LAYER_UPDATES
 		std::list<LayerUpdate> layerUpdates;
 		#endif
+
+		// NOTE:
+		//   we need a fixed range that does not become wider / narrower
+		//   during terrain deformations (otherwise the bins would change
+		//   across ALL nodes)
+		static unsigned int NUM_SPEEDMOD_BINS;
+		static float        MIN_SPEEDMOD_VALUE;
+		static float        MAX_SPEEDMOD_VALUE;
 
 		unsigned int layerNumber;
 		unsigned int numLeafNodes;

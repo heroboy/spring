@@ -125,16 +125,16 @@ void CollisionVolume::InitShape(
 	const int tType,
 	const int pAxis)
 {
-	float3 s;
+	float3 clampedScales;
 
 	// make sure none of the scales are ever negative or zero
 	//
 	// if the clamped vector is <1, 1, 1> (ie. all scales were <= 1.0f)
 	// then we assume a "default volume" is wanted and the unit/feature
 	// instances will be assigned spheres (of size model->radius)
-	s.x = std::max(1.0f, scales.x);
-	s.y = std::max(1.0f, scales.y);
-	s.z = std::max(1.0f, scales.z);
+	clampedScales.x = std::max(1.0f, scales.x);
+	clampedScales.y = std::max(1.0f, scales.y);
+	clampedScales.z = std::max(1.0f, scales.z);
 
 	// assign these here, since we can be
 	// called from outside the constructor
@@ -169,22 +169,26 @@ void CollisionVolume::InitShape(
 	//   conversion does not create too much of a difference
 	//
 	if (volumeType == COLVOL_TYPE_ELLIPSOID) {
-		if ((math::fabsf(s.x - s.y) < COLLISION_VOLUME_EPS) && (math::fabsf(s.y - s.z) < COLLISION_VOLUME_EPS)) {
+		const float dxyAbs = math::fabsf(clampedScales.x - clampedScales.y);
+		const float dyzAbs = math::fabsf(clampedScales.y - clampedScales.z);
+		const float d12Abs = math::fabsf(clampedScales[volumeAxes[1]] - clampedScales[volumeAxes[2]]);
+
+		if (dxyAbs < COLLISION_VOLUME_EPS && dyzAbs < COLLISION_VOLUME_EPS) {
 			volumeType = COLVOL_TYPE_SPHERE;
-		} else 
-		if ((math::fabsf(scales[volumeAxes[1]] - scales[volumeAxes[2]]) < COLLISION_VOLUME_EPS)) {
-			volumeType = COLVOL_TYPE_CYLINDER;
-		}
-		else {
-			volumeType = COLVOL_TYPE_BOX;
+		} else {
+			if (d12Abs < COLLISION_VOLUME_EPS) {
+				volumeType = COLVOL_TYPE_CYLINDER;
+			} else {
+				volumeType = COLVOL_TYPE_BOX;
+			}
 		}
 	}
 	if (volumeType == COLVOL_TYPE_CYLINDER) {
-		s[volumeAxes[1]] = std::max(s[volumeAxes[1]], s[volumeAxes[2]]);
-		s[volumeAxes[2]] =          s[volumeAxes[1]];
+		clampedScales[volumeAxes[1]] = std::max(clampedScales[volumeAxes[1]], clampedScales[volumeAxes[2]]);
+		clampedScales[volumeAxes[2]] =          clampedScales[volumeAxes[1]];
 	}
 
-	SetAxisScales(s);
+	SetAxisScales(clampedScales);
 	SetBoundingRadius();
 }
 
@@ -242,71 +246,66 @@ void CollisionVolume::RescaleAxes(const float3& scales) {
 
 
 
-const CollisionVolume* CollisionVolume::GetVolume(const CUnit* u, float3& pos) {
-	const CollisionVolume* vol = u->collisionVolume;
-	const LocalModelPiece* lap = u->lastAttackedPiece;
+float3 CollisionVolume::GetWorldSpacePos(const CSolidObject* o, const float3& extOffsets) const {
+	float3 pos = o->midPos;
+	pos += (o->rightdir * (axisOffsets.x + extOffsets.x));
+	pos += (o->updir    * (axisOffsets.y + extOffsets.y));
+	pos += (o->frontdir * (axisOffsets.z + extOffsets.z));
+	return pos;
+}
 
-	if (vol->DefaultToPieceTree() && u->HaveLastAttackedPiece(gs->frameNum)) {
-		assert(lap != NULL);
 
-		vol = lap->GetCollisionVolume();
-		pos = lap->GetAbsolutePos() + vol->GetOffsets();
-		pos = u->pos +
-			u->rightdir * pos.x +
-			u->updir    * pos.y +
-			u->frontdir * pos.z;
-	} else {
-		pos = u->midPos + vol->GetOffsets();
+
+const CollisionVolume* CollisionVolume::GetVolume(const CSolidObject* o, const LocalModelPiece* lmp) {
+	const CollisionVolume* vol = o->collisionVolume;
+
+	if (vol->DefaultToPieceTree() && lmp != NULL) {
+		vol = lmp->GetCollisionVolume();
 	}
 
 	return vol;
 }
 
-const CollisionVolume* CollisionVolume::GetVolume(const CFeature* f, float3& pos) {
-	pos = f->midPos + f->collisionVolume->GetOffsets();
-	return f->collisionVolume;
-}
 
 
+float CollisionVolume::GetPointSurfaceDistance(const CUnit* u, const LocalModelPiece* lmp, const float3& p) const {
+	const CollisionVolume* vol = u->collisionVolume;
 
-float CollisionVolume::GetPointDistance(const CUnit* u, const float3& pw) const {
-	const CollisionVolume* v = u->collisionVolume;
-	const LocalModelPiece* p = u->lastAttackedPiece;
+	CMatrix44f mat = u->GetTransformMatrix(true);
+	float3 off = GetOffsets();
 
-	CMatrix44f m = u->GetTransformMatrix(true);
-	float3 o = GetOffsets();
+	// Unit::GetTransformMatrix does not include this
+	// (its translation component is pos, not midPos)
+	mat.Translate(u->relMidPos * WORLD_TO_OBJECT_SPACE);
 
-	m.Translate(u->relMidPos * WORLD_TO_OBJECT_SPACE);
-
-	if (v->DefaultToPieceTree() && u->HaveLastAttackedPiece(gs->frameNum)) {
+	if (vol->DefaultToPieceTree() && lmp != NULL) {
 		// NOTE: if we get here, then <this> is the piece-volume
-		assert(p != NULL);
-		assert(this == p->GetCollisionVolume());
+		assert(this == lmp->GetCollisionVolume());
 
 		// need to transform into piece-space
-		m = m * p->GetModelSpaceMatrix();
-		o = -o;
+		mat = mat * lmp->GetModelSpaceMatrix();
+		off = -off;
 	}
 
-	m.Translate(o);
-	m.InvertAffineInPlace();
+	mat.Translate(off);
+	mat.InvertAffineInPlace();
 
-	return (GetPointSurfaceDistance(m, pw));
+	return (GetPointSurfaceDistance(mat, p));
 }
 
-float CollisionVolume::GetPointDistance(const CFeature* f, const float3& pw) const {
-	CMatrix44f m = f->GetTransformMatrixRef();
+float CollisionVolume::GetPointSurfaceDistance(const CFeature* f, const LocalModelPiece* /*lmp*/, const float3& p) const {
+	CMatrix44f mat = f->GetTransformMatrixRef();
 
-	m.Translate(f->relMidPos * WORLD_TO_OBJECT_SPACE);
-	m.Translate(GetOffsets());
-	m.InvertAffineInPlace();
+	mat.Translate(f->relMidPos * WORLD_TO_OBJECT_SPACE);
+	mat.Translate(GetOffsets());
+	mat.InvertAffineInPlace();
 
-	return (GetPointSurfaceDistance(m, pw));
+	return (GetPointSurfaceDistance(mat, p));
 }
 
-float CollisionVolume::GetPointSurfaceDistance(const CMatrix44f& mv, const float3& pw) const {
-	// transform <pw> to volume-space
-	float3 pv = mv.Mul(pw);
+float CollisionVolume::GetPointSurfaceDistance(const CMatrix44f& mv, const float3& p) const {
+	// transform <p> from world- to volume-space
+	float3 pv = mv.Mul(p);
 	float3 pt;
 
 	float l = 0.0f;

@@ -5,6 +5,7 @@
 
 #include "LuaInclude.h"
 
+#include "LuaHandle.h"
 #include "LuaUtils.h"
 #include "Game/Game.h"
 #include "Game/GameSetup.h"
@@ -43,12 +44,8 @@ bool LuaConstGame::PushEntries(lua_State* L)
 	assert(gameSetup);
 	
 	// FIXME  --  this is getting silly, convert to userdata?
-
-	const float gravity = -(mapInfo->map.gravity * GAME_SPEED * GAME_SPEED);
-	const bool ghostedBuildings = gameSetup->ghostedBuildings;
-	const int  startPosType     = gameSetup->startPosType;
-
-	LuaPushNamedString(L, "version",       SpringVersion::GetFull());
+	LuaPushNamedString(L, "version", SpringVersion::GetSync());
+	LuaPushNamedString(L, "buildFlags", (!CLuaHandle::GetHandleSynced(L))? SpringVersion::GetAdditional(): "");
 
 	if (uh) {
 		LuaPushNamedNumber(L, "maxUnits",      uh->MaxUnits());
@@ -58,10 +55,10 @@ bool LuaConstGame::PushEntries(lua_State* L)
 	LuaPushNamedNumber(L, "gameSpeed",     GAME_SPEED);
 	LuaPushNamedNumber(L, "squareSize",    SQUARE_SIZE);
 
-	LuaPushNamedNumber(L, "startPosType",  startPosType);
-	LuaPushNamedBool(L,   "ghostedBuildings", ghostedBuildings);
+	LuaPushNamedNumber(L, "startPosType",  gameSetup->startPosType);
+	LuaPushNamedBool(L,   "ghostedBuildings", gameSetup->ghostedBuildings);
 
-	LuaPushNamedNumber(L, "gravity",             gravity);
+	LuaPushNamedNumber(L, "gravity",             -mapInfo->map.gravity * GAME_SPEED * GAME_SPEED);
 	LuaPushNamedNumber(L, "windMin",             wind.GetMinWind());
 	LuaPushNamedNumber(L, "windMax",             wind.GetMaxWind());
 	LuaPushNamedString(L, "mapName",             mapInfo->map.name);

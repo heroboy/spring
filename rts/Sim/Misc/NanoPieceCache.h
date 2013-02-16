@@ -17,13 +17,20 @@ public:
 	void Update() { curBuildPowerMask >>= 1; }
 
 	float GetBuildPower() const { return (count_bits_set(curBuildPowerMask) / float(UNIT_SLOWUPDATE_RATE)); }
+
+	/// returns modelPiece (NOT scriptModelPiece)
 	int GetNanoPiece(CUnitScript* ownerScript);
 
 	const std::vector<int>& GetNanoPieces() const { return nanoPieces; }
 	      std::vector<int>& GetNanoPieces()       { return nanoPieces; }
 
+	void StopPolling() { lastNanoPieceCnt = MAX_QUERYNANOPIECE_CALLS * 2; }
+
 private:
+	// model-piece indices
 	std::vector<int> nanoPieces;
+
+	static const int MAX_QUERYNANOPIECE_CALLS = 30;
 
 	int lastNanoPieceCnt;
 	int curBuildPowerMask;

@@ -6,6 +6,7 @@
 #include <boost/cstdint.hpp> /* Replace with <stdint.h> if appropriate */
 
 #include "PFSTypes.h"
+#include "System/Vec2.h"
 #include "System/float3.h"
 #include "System/Platform/Threading.h"
 #include <boost/thread/mutex.hpp>
@@ -118,14 +119,14 @@ public:
 
 	struct PathOpData {
 		PathOpData() : type(PATH_NONE), moveDef(NULL), startPos(ZeroVector), goalPos(ZeroVector), minDistance(0.0f), owner(NULL), synced(false), pathID(-1), numRetries(0) OWNERID(-1) {}
-		PathOpData(PathRequestType tp, unsigned int pID, const MoveDef* md, const float3& sp, const float3& gp, float gr, const CSolidObject* own, bool sync):
-		type(tp), moveDef(md), startPos(sp), goalPos(gp), goalRadius(gr), owner(own), synced(sync), pathID(pID), numRetries(0) OWNERID(own?own->id:-1) {}
+		PathOpData(PathRequestType tp, const CSolidObject* own, unsigned int pID, const MoveDef* md, const float3& sp, const float3& gp, float gr, bool sync):
+		type(tp), owner(own), pathID(pID), moveDef(md), startPos(sp), goalPos(gp), goalRadius(gr), synced(sync), numRetries(0) OWNERID(own?own->id:-1) {}
 		PathOpData(PathRequestType tp, const CSolidObject* own, unsigned int pID):
-		type(tp), moveDef(NULL), startPos(ZeroVector), goalPos(ZeroVector), minDistance(0.0f), owner(own), synced(false), pathID(pID), numRetries(0) OWNERID(own?own->id:-1) {}
+		type(tp), owner(own), pathID(pID), moveDef(NULL), startPos(ZeroVector), goalPos(ZeroVector), minDistance(0.0f), synced(false), numRetries(0) OWNERID(own?own->id:-1) {}
 		PathOpData(PathRequestType tp, unsigned int pID):
-		type(tp), moveDef(NULL), startPos(ZeroVector), goalPos(ZeroVector), minDistance(0.0f), owner(NULL), synced(false), pathID(pID), numRetries(0) OWNERID(-1) {}
-		PathOpData(PathRequestType tp, unsigned int pID, const float3& callPos, float minDist, int nRet, const CSolidObject* own, bool sync):
-		type(tp), moveDef(NULL), startPos(callPos), goalPos(ZeroVector), minDistance(minDist), owner(own), synced(sync), pathID(pID), numRetries(nRet) OWNERID(own?own->id:-1) {}
+		type(tp), owner(NULL), pathID(pID), moveDef(NULL), startPos(ZeroVector), goalPos(ZeroVector), minDistance(0.0f), synced(false), numRetries(0) OWNERID(-1) {}
+		PathOpData(PathRequestType tp, const CSolidObject* own, unsigned int pID, int nRet, const float3& callPos, float minDist, bool sync):
+		type(tp), owner(own), pathID(pID), numRetries(nRet), moveDef(NULL), startPos(callPos), goalPos(ZeroVector), minDistance(minDist), synced(sync) OWNERID(own?own->id:-1) {}
 		PathOpData(PathRequestType tp, unsigned int x1, unsigned int z1, unsigned int x2, unsigned int z2):
 		type(tp), moveDef(NULL), startPos(ZeroVector), goalPos(ZeroVector), cx1(x1), cx2(x2), synced(false), cz1(z1), cz2(z2) OWNERID(-1) {}
 
@@ -169,7 +170,11 @@ public:
 	std::map<int, unsigned int> newPathCache;
 	static boost::thread *pathBatchThread;
 
-	virtual void UpdateFull() {}
+	virtual void UpdateFull(ST_FUNC int unused = 0) {}
+	void UpdateFull(MT_WRAP int unused = 0) {
+		ScopedDisableThreading sdt;
+		return UpdateFull(ST_CALL unused);
+	}
 
 	virtual void UpdatePath(ST_FUNC const CSolidObject* owner, unsigned int pathID) {}
 	void UpdatePath(MT_WRAP const CSolidObject* owner, unsigned int pathID);
@@ -210,21 +215,21 @@ public:
 	 */
 	virtual float3 NextWayPoint(
 		ST_FUNC
+		const CSolidObject* owner,
 		unsigned int pathID,
+		unsigned int numRetries,
 		float3 callerPos,
-		float minDistance = 0.0f,
-		int numRetries = 0,
-		const CSolidObject *owner = NULL,
-		bool synced = true
+		float radius,
+		bool synced
 	) { return ZeroVector; }
 	float3 NextWayPoint(
 		MT_WRAP
+		const CSolidObject* owner,
 		unsigned int pathID,
+		unsigned int numRetries,
 		float3 callerPos,
-		float minDistance = 0.0f,
-		int numRetries = 0,
-		const CSolidObject *owner = NULL,
-		bool synced = true
+		float radius,
+		bool synced
 	);
 
 	/**
@@ -287,21 +292,21 @@ public:
 	 */
 	virtual unsigned int RequestPath(
 		ST_FUNC
+		CSolidObject* caller,
 		const MoveDef* moveDef,
 		const float3& startPos,
 		const float3& goalPos,
-		float goalRadius = 8.0f,
-		CSolidObject* caller = 0,
-		bool synced = true
+		float goalRadius,
+		bool synced
 	) { return 0; }
 	unsigned int RequestPath(
 		MT_WRAP
+		CSolidObject* caller,
 		const MoveDef* moveDef,
 		const float3& startPos,
 		const float3& goalPos,
-		float goalRadius = 8.0f,
-		CSolidObject* caller = 0,
-		bool synced = true
+		float goalRadius,
+		bool synced
 	);
 
 	int GetPathID(int cid);
@@ -363,6 +368,12 @@ public:
 	bool wait;
 	boost::condition_variable cond;
 	volatile bool stopThread;
+
+	virtual int2 GetNumQueuedUpdates(ST_FUNC int unused = 0) const { return (int2(0, 0)); }
+	int2 GetNumQueuedUpdates(MT_WRAP int unused = 0) const {
+		ScopedDisableThreading sdt;
+		return GetNumQueuedUpdates(ST_CALL unused);
+	}
 };
 
 extern IPathManager* pathManager;

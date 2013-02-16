@@ -3644,6 +3644,14 @@
 					>
 				</File>
 				<File
+					RelativePath="..\..\Sim\Projectiles\ProjectileFunctors.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\Sim\Projectiles\ProjectileFunctors.h"
+					>
+				</File>
+				<File
 					RelativePath="..\..\Sim\Projectiles\ProjectileHandler.cpp"
 					>
 				</File>
@@ -4232,6 +4240,22 @@
 					</File>
 					<File
 						RelativePath="..\..\Sim\Path\Default\PathFinderDef.h"
+						>
+					</File>
+					<File
+						RelativePath="..\..\Sim\Path\Default\PathFlowMap.cpp"
+						>
+					</File>
+					<File
+						RelativePath="..\..\Sim\Path\Default\PathFlowMap.hpp"
+						>
+					</File>
+					<File
+						RelativePath="..\..\Sim\Path\Default\PathHeatMap.cpp"
+						>
+					</File>
+					<File
+						RelativePath="..\..\Sim\Path\Default\PathHeatMap.hpp"
 						>
 					</File>
 					<File
@@ -5153,6 +5177,26 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\System\Main.cpp"
+				>
+				<FileConfiguration
+					Name="Dedicated Server (Release)|Win32"
+					ExcludedFromBuild="true"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+					/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Dedicated Server (Debug)|Win32"
+					ExcludedFromBuild="true"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+					/>
+				</FileConfiguration>
+			</File>
+			<File
 				RelativePath="..\..\builds\dedicated\main.cpp"
 				>
 				<FileConfiguration
@@ -5231,26 +5275,6 @@
 						Name="VCCLCompilerTool"
 						ObjectFile="$(IntDir)\$(InputName)1.obj"
 						XMLDocumentationFileName="$(IntDir)\$(InputName)1.xdc"
-					/>
-				</FileConfiguration>
-			</File>
-			<File
-				RelativePath="..\..\System\Main.cpp"
-				>
-				<FileConfiguration
-					Name="Dedicated Server (Release)|Win32"
-					ExcludedFromBuild="true"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-					/>
-				</FileConfiguration>
-				<FileConfiguration
-					Name="Dedicated Server (Debug)|Win32"
-					ExcludedFromBuild="true"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
 					/>
 				</FileConfiguration>
 			</File>

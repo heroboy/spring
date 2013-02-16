@@ -12,9 +12,11 @@
 #include "System/myMath.h"
 
 int CSolidObject::deletingRefID = -1;
+
 const float CSolidObject::DEFAULT_MASS = 1e5f;
 const float CSolidObject::MINIMUM_MASS = 1e0f; // 1.0f
 const float CSolidObject::MAXIMUM_MASS = 1e6f;
+const float CSolidObject::IMPULSE_RATE = 0.968f;
 
 std::set<CSolidObject *> CSolidObject::solidObjects;
 
@@ -24,6 +26,7 @@ CR_REG_METADATA(CSolidObject,
 	CR_MEMBER(health),
 	CR_MEMBER(mass),
 	CR_MEMBER(crushResistance),
+	CR_MEMBER(impulseDecayRate),
 
 	CR_MEMBER(blocking),
 	CR_MEMBER(crushable),
@@ -80,6 +83,8 @@ CSolidObject::CSolidObject():
 	health(0.0f),
 	mass(DEFAULT_MASS),
 	crushResistance(0.0f),
+	impulseDecayRate(IMPULSE_RATE),
+
 	blocking(false),
 	crushable(false),
 	immobile(false),
@@ -297,7 +302,7 @@ YardMapStatus CSolidObject::GetGroundBlockingMaskAtPos(float3 gpos) const
 		frontv = fronts[buildFacing];
 		rightv = rights[buildFacing];
 
-		gpos   -= float3(mapPos.x * SQUARE_SIZE, 0.0f, mapPos.y * SQUARE_SIZE);
+		gpos -= float3(mapPos.x * SQUARE_SIZE, 0.0f, mapPos.y * SQUARE_SIZE);
 
 		// need to revert some of the transformations of CSolidObject::GetMapPos()
 		gpos.x += SQUARE_SIZE / 2 - (this->xsize >> 1) * SQUARE_SIZE; 
@@ -341,6 +346,6 @@ int2 CSolidObject::GetMapPos(const float3& position) const
 void CSolidObject::Kill(const float3& impulse, bool crushKill) {
 	crushKilled = crushKill;
 
-	DamageArray damage;
-	DoDamage(damage * (health + 1.0f), impulse, NULL, -DAMAGE_EXTSOURCE_KILLED);
+	DamageArray damage(health + 1.0f);
+	DoDamage(damage, impulse, NULL, -DAMAGE_EXTSOURCE_KILLED);
 }

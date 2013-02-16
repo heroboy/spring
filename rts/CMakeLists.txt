@@ -67,19 +67,20 @@ IF    (UNIX AND NOT MINGW)
 ENDIF (UNIX AND NOT MINGW)
 
 FIND_PACKAGE_STATIC(ZLIB REQUIRED)
-LIST(APPEND engineCommonLibraries ${DEVIL_IL_LIBRARY} ${JPEG_LIBRARY} ${PNG_LIBRARY})
+LIST(APPEND engineCommonLibraries ${DEVIL_IL_LIBRARY} ${JPEG_LIBRARY} ${PNG_LIBRARY} ${TIFF_LIBRARY} ${GIF_LIBRARY})
 LIST(APPEND engineCommonLibraries ${Boost_REGEX_LIBRARY} ${Boost_PROGRAM_OPTIONS_LIBRARY} ${Boost_SIGNALS_LIBRARY} ${Boost_SYSTEM_LIBRARY})
 LIST(APPEND engineCommonLibraries 7zip ${SPRING_MINIZIP_LIBRARY} ${ZLIB_LIBRARY})
 LIST(APPEND engineCommonLibraries lua luasocket archives streflop assimp)
+include_directories(${ZLIB_INCLUDE_DIR})
 
 if (MINGW AND Boost_CHRONO_FOUND)
 	# in newer boost versions the thread library depends on it
 	LIST(APPEND engineCommonLibraries ${Boost_CHRONO_LIBRARY})
 endif (MINGW AND Boost_CHRONO_FOUND)
 
-IF (MINGW)
-	LIST(APPEND engineCommonLibraries ${WIN32_LIBRARIES} mingw32)
-ENDIF (MINGW)
+IF (WIN32)
+	LIST(APPEND engineCommonLibraries ${WIN32_LIBRARIES})
+ENDIF (WIN32)
 
 FIND_PACKAGE_STATIC(TCMalloc)
 set(USE_TCMALLOC TRUE CACHE BOOL "use tcmalloc (part of google's perftools)")

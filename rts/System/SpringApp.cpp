@@ -53,7 +53,6 @@
 #include "System/GlobalConfig.h"
 #include "System/Log/ILog.h"
 #include "System/myMath.h"
-#include "System/OpenMP_cond.h"
 #include "System/StartScriptGen.h"
 #include "System/TimeProfiler.h"
 #include "System/Util.h"
@@ -115,6 +114,7 @@ CONFIG(int, MultiThreadCount).defaultValue(4).safemodeValue(4).minimumValue(4).m
 CONFIG(std::string, name).defaultValue(UnnamedPlayerName);
 
 
+SelectMenu* selectMenu = NULL;
 ClientSetup* startsetup = NULL;
 
 
@@ -139,42 +139,56 @@ static bool MultisampleVerify()
 }
 
 
-#ifdef _OPENMP
-static boost::uint32_t GetOpenMPCpuCore(int index, boost::uint32_t availCores, boost::uint32_t avoidCores)
+/**
+ * Tests if all CREG classes are complete
+ */
+static void TestCregClasses()
 {
-	boost::uint32_t ompCore = 1;
+	creg::System::InitializeClasses();
 
-	// find an unused core
-	{
-		while ((ompCore) && !(ompCore & availCores))
-			ompCore <<= 1;
-		int n = index;
-		// select n'th bit in availCores
-		while (n--)
-			do ompCore <<= 1; while ((ompCore) && !(ompCore & availCores));
+	int fineClasses = 0;
+	int brokenClasses = 0;
+
+	const std::vector<creg::Class*>& cregClasses = creg::System::GetClasses();
+	for (std::vector<creg::Class*>::const_iterator it = cregClasses.begin(); it != cregClasses.end(); ++it) {
+		const std::string& className = (*it)->name;
+		const size_t classSize = (*it)->size;
+
+		size_t cregSize = 0;
+
+		const std::vector<creg::Class::Member*>& classMembers = (*it)->members;
+		for (std::vector<creg::Class::Member*>::const_iterator jt = classMembers.begin(); jt != classMembers.end(); ++jt) {
+			const size_t memberOffset = (*jt)->offset;
+			const size_t typeSize = (*jt)->type->GetSize();
+			cregSize = std::max(cregSize, memberOffset + typeSize);
+		}
+
+		// alignment padding
+		if (cregSize % 4 > 0) cregSize += 4 - (cregSize % 4);
+
+		if (cregSize != classSize) {
+			brokenClasses++;
+			LOG_L(L_WARNING, "CREG: Missing param(s) in class %s, real size %u, creg size %u", className.c_str(), classSize, cregSize);
+			/*for (std::vector<creg::Class::Member*>::const_iterator jt = classMembers.begin(); jt != classMembers.end(); ++jt) {
+				const std::string memberName   = (*jt)->name;
+				const size_t      memberOffset = (*jt)->offset;
+				const std::string typeName = (*jt)->type->GetName();
+				const size_t      typeSize = (*jt)->type->GetSize();
+				LOG_L(L_WARNING, "  member %20s, type %12s, offset %3u, size %u", memberName.c_str(), typeName.c_str(), memberOffset, typeSize);
+			}*/
+		} else {
+			fineClasses++;
+		}
+		
+		//FIXME check for holes in the CREG class, too
 	}
 
-	// select one of the mainthread cores if none found
-	if (ompCore == 0) {
-		/*int cntBits =*/ count_bits_set(avoidCores);
-		ompCore = 1;
-		while ((ompCore) && !(ompCore & avoidCores))
-			ompCore <<= 1;
-		int n = index;
-		// select n'th bit in avoidCores
-		while (n--)
-			do ompCore <<= 1; while ((ompCore) && !(ompCore & avoidCores));
+	if (brokenClasses > 0) {
+		LOG_L(L_WARNING, "CREG Results: %i of %i classes are broken", brokenClasses, brokenClasses + fineClasses);
+	} else {
+		LOG("CREG: Everything fine");
 	}
-
-	// fallback use all
-	if (ompCore == 0) {
-		ompCore = ~0;
-	}
-
-	return ompCore;
 }
-#endif
-
 
 
 /**
@@ -291,38 +305,6 @@ bool SpringApp::Initialize()
 	// Multithreading & Affinity
 	Threading::SetThreadName("unknown"); // set default threadname
 	LOG("CPU Cores: %d", Threading::GetAvailableCores());
-#ifdef _OPENMP
-	boost::uint32_t systemCores   = Threading::GetAvailableCoresMask();
-	boost::uint32_t mainAffinity  = systemCores & configHandler->GetUnsigned("SetCoreAffinity");
-	boost::uint32_t ompAvailCores = systemCores & ~mainAffinity;
-
-	// For latency reasons our openmp threads yield rarely and so eat a lot cputime with idleing.
-	// So it's better we always leave 1 core free for our other threads, drivers & OS
-	if (omp_get_max_threads() > 2)
-		omp_set_num_threads(omp_get_max_threads() - 1); 
-
-	// omp threads
-	boost::uint32_t ompCores = 0;
-	#pragma omp parallel reduction(|:ompCores)
-	{
-		int i = omp_get_thread_num();
-		if (i != 0) { // 0 is the source thread
-			Threading::SetThreadName(IntToString(i, "omp%i"));
-			//boost::uint32_t ompCore = 1 << i;
-			boost::uint32_t ompCore = GetOpenMPCpuCore(i - 1, ompAvailCores, mainAffinity);
-			Threading::SetAffinity(ompCore);
-			ompCores |= ompCore;
-		}
-	}
-
-	// mainthread
-	boost::uint32_t nonOmpCores = ~ompCores;
-	if (mainAffinity == 0) mainAffinity = systemCores;
-	Threading::SetAffinityHelper("Main", mainAffinity & nonOmpCores);
-
-#else
-	Threading::SetAffinityHelper("Main", configHandler->GetUnsigned("SetCoreAffinity"));
-#endif
 
 	// Create CGameSetup and CPreGame objects
 	Startup();
@@ -790,6 +772,7 @@ void SpringApp::ParseCmdLine()
 	cmdline->AddSwitch(0,   "list-skirmish-ais",  "Dump a list of available Skirmish AIs to stdout");
 	cmdline->AddSwitch(0,   "list-config-vars",   "Dump a list of config vars and meta data to stdout");
 	cmdline->AddSwitch(0,   "list-def-tags",      "Dump a list of all unitdef-, weapondef-, ... tags and meta data to stdout");
+	cmdline->AddSwitch(0,   "test-creg",          "Test if all CREG classes are completed");
 	cmdline->AddSwitch('i', "isolation",          "Limit the data-dir (games & maps) scanner to one directory");
 	cmdline->AddString(0,   "isolation-dir",      "Specify the isolation-mode data-dir (see --isolation)");
 	cmdline->AddString('g', "game",               "Specify the game that will be instantly loaded");
@@ -838,6 +821,10 @@ void SpringApp::ParseCmdLine()
 	}
 	else if (cmdline->IsSet("list-def-tags")) {
 		DefType::OutputTagMap();
+		exit(0);
+	}
+	else if (cmdline->IsSet("test-creg")) {
+		TestCregClasses();
 		exit(0);
 	}
 
@@ -945,7 +932,8 @@ void SpringApp::Startup()
 #ifdef SYNCDEBUG
 		CSyncDebugger::GetInstance()->Initialize(server, 64);
 #endif
-		activeController = new SelectMenu(server);
+		selectMenu = new SelectMenu(server);
+		activeController = selectMenu;
 	}
 	else if (inputFile.rfind("sdf") == inputFile.size() - 3)
 	{
@@ -1122,11 +1110,14 @@ void SpringApp::Shutdown()
 	GML::Exit();
 	SafeDelete(pregame);
 	SafeDelete(game);
+	agui::FreeGui();
+	SafeDelete(selectMenu);
 	SafeDelete(net);
 	SafeDelete(gameServer);
 	SafeDelete(gameSetup);
 	CLoadScreen::DeleteInstance();
 	ISound::Shutdown();
+	FreeJoystick();
 	SafeDelete(font);
 	SafeDelete(smallFont);
 	CNamedTextures::Kill();
@@ -1139,6 +1130,7 @@ void SpringApp::Shutdown()
 	KeyInput::FreeInstance(keyInput);
 
 	SDL_WM_GrabInput(SDL_GRAB_OFF);
+	WindowManagerHelper::FreeIcon();
 #if !defined(HEADLESS)
 	SDL_QuitSubSystem(SDL_INIT_VIDEO|SDL_INIT_TIMER|SDL_INIT_JOYSTICK);
 #endif

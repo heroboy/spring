@@ -220,6 +220,7 @@ bool LuaSyncedRead::PushEntries(lua_State* L)
 	REGISTER_LUA_CFUNC(GetUnitFlanking);
 	REGISTER_LUA_CFUNC(GetUnitWeaponState);
 	REGISTER_LUA_CFUNC(GetUnitWeaponVectors);
+	REGISTER_LUA_CFUNC(GetUnitWeaponTryTarget);
 	REGISTER_LUA_CFUNC(GetUnitTravel);
 	REGISTER_LUA_CFUNC(GetUnitFuel);
 	REGISTER_LUA_CFUNC(GetUnitEstimatedPath);
@@ -414,7 +415,7 @@ static inline bool IsFeatureVisible(lua_State* L, const CFeature* feature)
 	return feature->IsInLosForAllyTeam(CLuaHandle::GetHandleReadAllyTeam(L));
 }
 
-static inline bool IsProjectileVisible(lua_State* L, const ProjectileMapPair& pp)
+static inline bool IsProjectileVisible(lua_State* L, const ProjectileMapValPair& pp)
 {
 	const CProjectile* pro = pp.first;
 	const int proAllyteam = pp.second;
@@ -542,7 +543,7 @@ static inline CUnit* ParseTypedUnit(lua_State* L, const char* caller, int index)
 static CProjectile* ParseProjectile(lua_State* L, const char* caller, int index)
 {
 	const int proID = luaL_checkint(L, index);
-	const ProjectileMapPair* pp = ph->GetMapPairBySyncedID(proID);
+	const ProjectileMapValPair* pp = ph->GetMapPairBySyncedID(proID);
 	if (!pp) {
 		return NULL;
 	}
@@ -2430,6 +2431,8 @@ int LuaSyncedRead::GetProjectilesInRectangle(lua_State* L)
 	const float3 mins(xmin, 0.0f, zmin);
 	const float3 maxs(xmax, 0.0f, zmax);
 
+	bool renderAccess = GML::SimEnabled() && !Threading::IsSimThread();
+
 	const vector<CProjectile*>& rectProjectiles = qf->GetProjectilesExact(mins, maxs);
 	const unsigned int rectProjectileCount = rectProjectiles.size();
 	unsigned int arrayIndex = 1;
@@ -2440,6 +2443,8 @@ int LuaSyncedRead::GetProjectilesInRectangle(lua_State* L)
 		if (CLuaHandle::GetHandleFullRead(L)) {
 			for (unsigned int i = 0; i < rectProjectileCount; i++) {
 				const CProjectile* pro = rectProjectiles[i];
+				if (renderAccess && !ph->RenderAccess(pro))
+					continue;
 
 				if (pro->weapon && excludeWeaponProjectiles) { continue; }
 				if (pro->piece && excludePieceProjectiles) { continue; }
@@ -2452,8 +2457,10 @@ int LuaSyncedRead::GetProjectilesInRectangle(lua_State* L)
 	} else {
 		for (unsigned int i = 0; i < rectProjectileCount; i++) {
 			const CProjectile* pro = rectProjectiles[i];
+			if (renderAccess && !ph->RenderAccess(pro))
+				continue;
 			const CUnit* unit = pro->owner();
-			const ProjectileMapPair proPair(const_cast<CProjectile*>(pro), ((unit != NULL)? unit->allyteam: CLuaHandle::GetHandleReadAllyTeam(L)));
+			const ProjectileMapValPair proPair(const_cast<CProjectile*>(pro), ((unit != NULL)? unit->allyteam: CLuaHandle::GetHandleReadAllyTeam(L)));
 
 			if (pro->weapon && excludeWeaponProjectiles) { continue; }
 			if (pro->piece && excludePieceProjectiles) { continue; }
@@ -3019,11 +3026,10 @@ int LuaSyncedRead::GetUnitNanoPieces(lua_State* L)
 	lua_createtable(L, nanoPieces->size(), 0);
 
 	for (size_t p = 0; p < nanoPieces->size(); p++) {
-		const int scriptnum = (*nanoPieces)[p];
-		const int piecenum  = unit->script->ScriptToModel(scriptnum) + 1;
+		const int modelPieceNum = (*nanoPieces)[p];
 
 		lua_pushnumber(L, p + 1);
-		lua_pushnumber(L, piecenum);
+		lua_pushnumber(L, modelPieceNum + 1); //lua 1-indexed, c++ 0-indexed
 		lua_rawset(L, -3);
 	}
 
@@ -3231,6 +3237,35 @@ int LuaSyncedRead::GetUnitWeaponVectors(lua_State* L)
 	lua_pushnumber(L, dir->z);
 
 	return 6;
+}
+
+
+int LuaSyncedRead::GetUnitWeaponTryTarget(lua_State* L)
+{
+	CUnit* unit = ParseAllyUnit(L, __FUNCTION__, 1);
+	if (unit == NULL) {
+		return 0;
+	}
+	const int weaponNum = luaL_checkint(L, 2);
+	if ((weaponNum < 0) || ((size_t)weaponNum >= unit->weapons.size())) {
+		return 0;
+	}
+
+	const CWeapon* weapon = unit->weapons[weaponNum];	
+	const CUnit* enemy = NULL;
+
+	float3 pos;
+
+	if (lua_gettop(L) >= 5) {
+		pos.x = luaL_optnumber(L, 3, 0.0f);
+		pos.y = luaL_optnumber(L, 4, 0.0f);
+		pos.z = luaL_optnumber(L, 5, 0.0f);
+	} else {
+		enemy = ParseUnit(L, __FUNCTION__, 3);
+	}
+
+	lua_pushboolean(L, weapon->TryTarget(pos, true, enemy));
+	return 1;
 }
 
 

@@ -258,7 +258,7 @@ static inline CProjectile* ParseRawProjectile(lua_State* L, const char* caller, 
 
 	const int projID = lua_toint(L, index);
 
-	const ProjectileMapPair* pp = NULL;
+	const ProjectileMapValPair* pp = NULL;
 	if (synced) {
 		pp = ph->GetMapPairBySyncedID(projID);
 	} else {
@@ -547,7 +547,7 @@ int LuaUnsyncedCtrl::PlaySoundFile(lua_State* L)
 	}
 	bool success = false;
 	const string soundFile = lua_tostring(L, 1);
-	const unsigned int soundID = sound->GetSoundId(soundFile, false);
+	const unsigned int soundID = sound->GetSoundId(soundFile);
 	if (soundID > 0) {
 		float volume = luaL_optfloat(L, 2, 1.0f);
 		float3 pos;

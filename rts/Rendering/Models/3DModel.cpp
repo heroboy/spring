@@ -18,6 +18,14 @@
 /** ****************************************************************************************************
  * S3DModel
  */
+void S3DModel::DeletePieces(S3DModelPiece* piece)
+{
+	for (unsigned int n = 0; n < piece->GetChildCount(); n++) {
+		DeletePieces(piece->GetChild(n));
+	}
+
+	delete piece;
+}
 
 S3DModelPiece* S3DModel::FindPiece(const std::string& name) const
 {
@@ -35,22 +43,27 @@ S3DModelPiece::S3DModelPiece()
 	: model(NULL)
 	, parent(NULL)
 	, colvol(NULL)
+	, type(MODELTYPE_OTHER)
 	, isEmpty(true)
 	, dispListID(0)
-	, type(MODELTYPE_OTHER)
 {
-	#ifdef USE_PIECE_GEOMETRY_VBOS
-	glGenBuffers(VBO_NUMTYPES, &vboIDs[0]);
-	#endif
 }
 
 S3DModelPiece::~S3DModelPiece()
 {
 	glDeleteLists(dispListID, 1);
-	#ifdef USE_PIECE_GEOMETRY_VBOS
-	glDeleteBuffers(VBO_NUMTYPES, &vboIDs[0]);
-	#endif
 	delete colvol;
+}
+
+unsigned int S3DModelPiece::CreateDrawForList() const
+{
+	const unsigned int dlistID = glGenLists(1);
+
+	glNewList(dlistID, GL_COMPILE);
+	DrawForList();
+	glEndList();
+
+	return dlistID;
 }
 
 void S3DModelPiece::DrawStatic() const
@@ -104,24 +117,26 @@ void LocalModel::SetLODCount(unsigned int count)
 void LocalModel::ReloadDisplayLists()
 {
 	for (std::vector<LocalModelPiece*>::iterator piece = pieces.begin(); piece != pieces.end(); ++piece) {
-		(*piece)->dispListID = (*piece)->original->dispListID;
+		(*piece)->dispListID = (*piece)->original->GetDisplayListID();
 	}
 }
 
-LocalModelPiece* LocalModel::CreateLocalModelPieces(const S3DModelPiece* mpParent, size_t pieceNum)
+LocalModelPiece* LocalModel::CreateLocalModelPieces(const S3DModelPiece* mpParent)
 {
 	LocalModelPiece* lmpParent = new LocalModelPiece(mpParent);
 	LocalModelPiece* lmpChild = NULL;
 
 	pieces.push_back(lmpParent);
 
+	lmpParent->SetLModelPieceIndex(pieces.size() - 1);
+	lmpParent->SetScriptPieceIndex(pieces.size() - 1);
+
 	// the mapping is 1:1 for Lua scripts, but not necessarily for COB
 	// CobInstance::MapScriptToModelPieces does the remapping (if any)
-	lmpParent->SetLModelPieceIndex(pieceNum);
-	lmpParent->SetScriptPieceIndex(pieceNum);
+	assert(lmpParent->GetLModelPieceIndex() == lmpParent->GetScriptPieceIndex());
 
 	for (unsigned int i = 0; i < mpParent->GetChildCount(); i++) {
-		lmpChild = CreateLocalModelPieces(mpParent->GetChild(i), ++pieceNum);
+		lmpChild = CreateLocalModelPieces(mpParent->GetChild(i));
 		lmpChild->SetParent(lmpParent);
 		lmpParent->AddChild(lmpChild);
 	}
@@ -152,7 +167,7 @@ LocalModelPiece::LocalModelPiece(const S3DModelPiece* piece)
 {
 	assert(piece != NULL);
 
-	dispListID =  piece->dispListID;
+	dispListID =  piece->GetDisplayListID();
 	pos        =  piece->offset;
 
 	children.reserve(piece->children.size());

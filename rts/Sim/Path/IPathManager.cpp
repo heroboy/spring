@@ -121,26 +121,26 @@ void IPathManager::DeletePath(MT_WRAP unsigned int pathID) {
 
 float3 IPathManager::NextWayPoint(
 	MT_WRAP
+	const CSolidObject* owner,
 	unsigned int pathID,
+	unsigned int numRetries,
 	float3 callerPos,
-	float minDistance,
-	int numRetries,
-	const CSolidObject *owner,
+	float radius,
 	bool synced
 	) {
 		if (!Threading::threadedPath) {
 			if (!modInfo.asyncPathFinder)
-				return NextWayPoint(ST_CALL pathID, callerPos, minDistance, numRetries, owner, synced);
+				return NextWayPoint(ST_CALL owner, pathID, numRetries, callerPos, radius, synced);
 			PathData* p = GetPathData(pathID);
 			if (p == NULL || p->pathID < 0)
 				return callerPos;
-			p->nextWayPoint = NextWayPoint(ST_CALL p->pathID, callerPos, minDistance, numRetries, owner, synced);
+			p->nextWayPoint = NextWayPoint(ST_CALL owner, p->pathID, numRetries, callerPos, radius, synced);
 			return p->nextWayPoint;
 		}
 		PathData* p;
 		NOTIFY_PATH_THREAD(
 			p = GetNewPathData(pathID);
-			pathOps.push_back(PathOpData(NEXT_WAYPOINT, pathID, callerPos, minDistance, numRetries, owner, synced));
+			pathOps.push_back(PathOpData(NEXT_WAYPOINT, owner, pathID, numRetries, callerPos, radius, synced));
 		)
 		if (p == NULL || p->pathID < 0)
 			return callerPos;
@@ -166,26 +166,26 @@ void IPathManager::GetPathWayPoints(
 
 unsigned int IPathManager::RequestPath(
 	MT_WRAP
+	CSolidObject* caller,
 	const MoveDef* moveDef,
 	const float3& startPos,
 	const float3& goalPos,
 	float goalRadius,
-	CSolidObject* caller,
 	bool synced
 	) {
 		if (!Threading::threadedPath) {
 			if (!modInfo.asyncPathFinder)
-				return RequestPath(ST_CALL moveDef, startPos, goalPos, goalRadius, caller, synced);
+				return RequestPath(ST_CALL caller, moveDef, startPos, goalPos, goalRadius, synced);
 			unsigned int cid;
 			do { cid = ++pathRequestID; } while ((cid == 0) || (pathInfos.find(cid) != pathInfos.end()));
-			pathInfos[cid] = PathData(RequestPath(ST_CALL moveDef, startPos, goalPos, goalRadius, caller, synced), startPos);
+			pathInfos[cid] = PathData(RequestPath(ST_CALL caller, moveDef, startPos, goalPos, goalRadius, synced), startPos);
 			return cid;
 		}
 		unsigned int cid;
 		NOTIFY_PATH_THREAD(
 			do { cid = ++pathRequestID; } while ((cid == 0) || (pathInfos.find(cid) != pathInfos.end()));
 			newPathInfos[cid] = PathData(-1, startPos);
-			pathOps.push_back(PathOpData(REQUEST_PATH, cid, moveDef, startPos, goalPos, goalRadius, caller, synced));
+			pathOps.push_back(PathOpData(REQUEST_PATH, caller, cid, moveDef, startPos, goalPos, goalRadius, synced));
 		)
 		return cid;
 }
@@ -223,14 +223,14 @@ void IPathManager::AsynchronousThread() {
 #endif
 			switch(cid.type) {
 				case REQUEST_PATH:
-					pid = RequestPath(ST_CALL cid.moveDef, cid.startPos, cid.goalPos, cid.goalRadius, const_cast<CSolidObject*>(cid.owner), cid.synced);
+					pid = RequestPath(ST_CALL const_cast<CSolidObject*>(cid.owner), cid.moveDef, cid.startPos, cid.goalPos, cid.goalRadius, cid.synced);
 					newPathCache[cid.pathID] = pid;
 					pathUpdates[cid.pathID].push_back(PathUpdateData(REQUEST_PATH, pid));
 					break;
 				case NEXT_WAYPOINT:
 					pid = GetPathID(cid.pathID);
 					if (pid >= 0)
-						pathUpdates[cid.pathID].push_back(PathUpdateData(NEXT_WAYPOINT, NextWayPoint(ST_CALL pid, cid.startPos, cid.minDistance, cid.numRetries, cid.owner, cid.synced)));
+						pathUpdates[cid.pathID].push_back(PathUpdateData(NEXT_WAYPOINT, NextWayPoint(ST_CALL cid.owner, pid, cid.numRetries, cid.startPos, cid.minDistance, cid.synced)));
 					break;
 				case UPDATE_PATH:
 					pid = GetPathID(cid.pathID);

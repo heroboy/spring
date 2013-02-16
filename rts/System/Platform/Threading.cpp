@@ -2,14 +2,16 @@
 
 #include "lib/gml/gml_base.h"
 #include "Threading.h"
+#include "System/bitops.h"
+#include "System/OpenMP_cond.h"
 #include "System/Config/ConfigHandler.h"
 #include "System/Log/ILog.h"
 #include "System/Platform/CrashHandler.h"
 #include "System/Sync/FPUCheck.h"
-#include "System/Util.h"
 
 #include <boost/version.hpp>
 #include <boost/thread.hpp>
+#include <boost/cstdint.hpp>
 #if defined(__APPLE__)
 #elif defined(WIN32)
 	#include <windows.h>
@@ -20,6 +22,7 @@
 	#include <sched.h>
 #endif
 
+extern void streflop_init_omp();
 
 namespace Threading {
 	unsigned simThreadCount = GML::NumMainSimThreads();
@@ -37,6 +40,7 @@ namespace Threading {
 	static boost::thread::id simThreadID;
 	static boost::thread::id batchThreadID;
 #endif	
+
 #if MULTITHREADED_SIM
 	bool multiThreadedSim = false;
 	int threadCurrentUnitIDs[2 * GML_MAX_NUM_THREADS + 10];
@@ -49,6 +53,37 @@ void MultiThreadSimErrorFunc() { LOG_L(L_ERROR, "Non-threadsafe sim code reached
 void NonThreadedPathErrorFunc() { LOG_L(L_ERROR, "Non-threadsafe path code reached from threaded context"); CrashHandler::OutputStacktrace(); }
 void ThreadNotUnitOwnerErrorFunc() { LOG_L(L_ERROR, "Illegal attempt to modify a unit not owned by the current thread"); CrashHandler::OutputStacktrace(); }
 
+#if defined(__APPLE__)
+#elif defined(WIN32)
+	static DWORD cpusSystem = 0;
+#else
+	static cpu_set_t cpusSystem;
+#endif
+
+	void DetectCores()
+	{
+		static bool inited = false;
+		if (inited)
+			return;
+		
+	#if defined(__APPLE__)
+		// no-op
+
+	#elif defined(WIN32)
+		// Get the available cores
+		DWORD curMask;
+		GetProcessAffinityMask(GetCurrentProcess(), &curMask, &cpusSystem);
+
+	#else
+		// Get the available cores
+		CPU_ZERO(&cpusSystem);
+		sched_getaffinity(0, sizeof(cpu_set_t), &cpusSystem);
+	#endif
+
+		inited = true;
+	}
+
+
 	boost::uint32_t SetAffinity(boost::uint32_t cores_bitmask, bool hard)
 	{
 		if (cores_bitmask == 0) {
@@ -59,11 +94,6 @@ void ThreadNotUnitOwnerErrorFunc() { LOG_L(L_ERROR, "Illegal attempt to modify a
 		// no-op
 
 	#elif defined(WIN32)
-		// Get the available cores
-		DWORD curMask;
-		DWORD cpusSystem = 0;
-		GetProcessAffinityMask(GetCurrentProcess(), &curMask, &cpusSystem);
-
 		// Create mask
 		DWORD_PTR cpusWanted = (cores_bitmask & cpusSystem);
 
@@ -79,12 +109,8 @@ void ThreadNotUnitOwnerErrorFunc() { LOG_L(L_ERROR, "Illegal attempt to modify a
 		// Return final mask
 		return (result > 0) ? (boost::uint32_t)cpusWanted : 0;
 	#else
-		// Get the available cores
-		cpu_set_t cpusSystem; CPU_ZERO(&cpusSystem);
-		cpu_set_t cpusWanted; CPU_ZERO(&cpusWanted);
-		sched_getaffinity(0, sizeof(cpu_set_t), &cpusSystem);
-
 		// Create mask
+		cpu_set_t cpusWanted; CPU_ZERO(&cpusWanted);
 		int numCpus = std::min(CPU_COUNT(&cpusSystem), 32); // w/o the min(.., 32) `(1 << n)` could overflow!
 		for (int n = numCpus - 1; n >= 0; --n) {
 			if ((cores_bitmask & (1 << n)) != 0) {
@@ -146,19 +172,10 @@ void ThreadNotUnitOwnerErrorFunc() { LOG_L(L_ERROR, "Illegal attempt to modify a
 		systemCores = ~0;
 
 	#elif defined(WIN32)
-		// Get the available cores
-		DWORD curMask;
-		DWORD cpusSystem = 0;
-		GetProcessAffinityMask(GetCurrentProcess(), &curMask, &cpusSystem);
-
 		// Create mask
 		systemCores = cpusSystem;
 
 	#else
-		// Get the available cores
-		cpu_set_t cpusSystem; CPU_ZERO(&cpusSystem);
-		sched_getaffinity(0, sizeof(cpu_set_t), &cpusSystem);
-
 		// Create mask
 		int numCpus = std::min(CPU_COUNT(&cpusSystem), 32); // w/o the min(.., 32) `(1 << n)` could overflow!
 		for (int n = numCpus - 1; n >= 0; --n) {
@@ -171,6 +188,102 @@ void ThreadNotUnitOwnerErrorFunc() { LOG_L(L_ERROR, "Illegal attempt to modify a
 		return systemCores;
 	}
 
+
+	bool OMPInited = false;
+
+	#ifdef _OPENMP
+	static boost::uint32_t GetOpenMPCpuCore(int index, boost::uint32_t availCores, boost::uint32_t avoidCores)
+	{
+		boost::uint32_t ompCore = 1;
+
+		// find an unused core
+		{
+			while ((ompCore) && !(ompCore & availCores))
+				ompCore <<= 1;
+			int n = index;
+			// select n'th bit in availCores
+			while (n--)
+				do ompCore <<= 1; while ((ompCore) && !(ompCore & availCores));
+		}
+
+		// select one of the mainthread cores if none found
+		if (ompCore == 0) {
+			/*int cntBits =*/ count_bits_set(avoidCores);
+			ompCore = 1;
+			while ((ompCore) && !(ompCore & avoidCores))
+				ompCore <<= 1;
+			int n = index;
+			// select n'th bit in avoidCores
+			while (n--)
+				do ompCore <<= 1; while ((ompCore) && !(ompCore & avoidCores));
+		}
+
+		// fallback use all
+		if (ompCore == 0) {
+			ompCore = ~0;
+		}
+
+		return ompCore;
+	}
+	#endif
+
+	static void streflop_omp() {
+	#ifdef STREFLOP_SSE
+		::streflop_init_omp();
+	#endif
+	}
+
+	void InitOMP(bool useOMP) {
+		if (OMPInited) {
+			LOG_L(L_ERROR, "InitOMP: OMP already initialized!");
+			return;
+		}
+		OMPInited = true;
+	#ifdef _OPENMP
+		boost::uint32_t systemCores   = Threading::GetAvailableCoresMask();
+		boost::uint32_t mainAffinity  = systemCores & configHandler->GetUnsigned("SetCoreAffinity");
+		boost::uint32_t ompAvailCores = systemCores & ~mainAffinity;
+
+		// For latency reasons our openmp threads yield rarely and so eat a lot cputime with idleing.
+		// So it's better we always leave 1 core free for our other threads, drivers & OS
+		if (!useOMP) {
+			omp_set_num_threads(1);
+			omp_set_dynamic(0);
+		}
+		else if (omp_get_max_threads() > 2)
+			omp_set_num_threads(omp_get_max_threads() - 1); 
+
+		streflop_omp();
+
+		// omp threads
+		boost::uint32_t ompCores = 0;
+	Threading::OMPCheck();
+	#pragma omp parallel reduction(|:ompCores)
+		{
+			int i = omp_get_thread_num();
+			if (i != 0) { // 0 is the source thread
+				Threading::SetThreadName(IntToString(i, "omp%i"));
+				//boost::uint32_t ompCore = 1 << i;
+				boost::uint32_t ompCore = GetOpenMPCpuCore(i - 1, ompAvailCores, mainAffinity);
+				Threading::SetAffinity(ompCore);
+				ompCores |= ompCore;
+			}
+		}
+
+		// mainthread
+		boost::uint32_t nonOmpCores = ~ompCores;
+		if (mainAffinity == 0) mainAffinity = systemCores;
+		Threading::SetAffinityHelper("Main", mainAffinity & nonOmpCores);
+
+	#else
+		Threading::SetAffinityHelper("Main", configHandler->GetUnsigned("SetCoreAffinity"));
+	#endif
+	}
+
+	void OMPError() {
+		LOG_L(L_ERROR, "OMPCheck: Attempt to use OMP before initialization");
+		CrashHandler::OutputStacktrace();
+	}
 
 	void SetThreadScheduler()
 	{

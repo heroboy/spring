@@ -502,7 +502,7 @@ void CMiniMap::MoveView(int x, int y)
 	float3 clickPos;
 	clickPos.x = ((float(x -                               xpos          )) /  width) * (gs->mapx * SQUARE_SIZE);
 	clickPos.z = ((float(y - (globalRendering->viewSizeY - ypos - height))) / height) * (gs->mapy * SQUARE_SIZE);
-	camHandler->CameraTransition(0.15f);
+	camHandler->CameraTransition(0.0f);
 	camHandler->GetCurrentController().SetPos(clickPos);
 	unitTracker.Disable();
 }
@@ -829,9 +829,10 @@ std::string CMiniMap::GetTooltip(int x, int y)
 		return selTip;
 	}
 
-	const float3 pos(float(x-xpos)/width*gs->mapx*SQUARE_SIZE, 500,
-	                 float(y-(globalRendering->viewSizeY-ypos-height))/height*gs->mapx*SQUARE_SIZE);
-	return CTooltipConsole::MakeGroundString(pos);
+	const float worldx = float(x                               - xpos          ) / width  * gs->mapx * SQUARE_SIZE;
+	const float worldz = float(y - (globalRendering->viewSizeY - ypos - height)) / height * gs->mapx * SQUARE_SIZE;
+
+	return CTooltipConsole::MakeGroundString(float3(worldx, 500.0f, worldz));
 }
 
 

@@ -11,13 +11,13 @@
 #include "PathDefines.hpp"
 
 #include "System/float3.h"
+#include "System/Rectangle.h"
 
 #ifndef QTPFS_VIRTUAL_NODE_FUNCTIONS
 #define QTNode INode
 #endif
 
 namespace QTPFS {
-	struct PathRectangle;
 	struct NodeLayer;
 	struct INode {
 	public:
@@ -33,7 +33,7 @@ namespace QTPFS {
 		bool operator >= (const INode* n) const { return (fCost >= n->fCost); }
 
 		#ifdef QTPFS_VIRTUAL_NODE_FUNCTIONS
-		virtual void Serialize(std::fstream&, unsigned int*, bool) = 0;
+		virtual void Serialize(std::fstream&, NodeLayer&, unsigned int*, bool) = 0;
 		virtual unsigned int GetNeighbors(const std::vector<INode*>&, std::vector<INode*>&) = 0;
 		virtual const std::vector<INode*>& GetNeighbors(const std::vector<INode*>& v) = 0;
 		virtual bool UpdateNeighborCache(const std::vector<INode*>& nodes) = 0;
@@ -43,10 +43,10 @@ namespace QTPFS {
 		#endif
 
 		unsigned int GetNeighborRelation(const INode* ngb) const;
-		unsigned int GetRectangleRelation(const PathRectangle& r) const;
+		unsigned int GetRectangleRelation(const SRectangle& r) const;
 		float GetDistance(const INode* n, unsigned int type) const;
 		float3 GetNeighborEdgeTransitionPoint(const INode* ngb, const float3& pos, float alpha) const;
-		PathRectangle ClipRectangle(const PathRectangle& r) const;
+		SRectangle ClipRectangle(const SRectangle& r) const;
 
 		#ifdef QTPFS_VIRTUAL_NODE_FUNCTIONS
 		virtual unsigned int xmin() const = 0;
@@ -112,6 +112,8 @@ namespace QTPFS {
 		);
 		~QTNode();
 
+		static void InitStatic();
+
 		// NOTE:
 		//     root-node identifier is always 0
 		//     <i> is a NODE_IDX index in [0, 3]
@@ -122,9 +124,9 @@ namespace QTPFS {
 		boost::uint64_t GetCheckSum() const;
 
 		void Delete();
-		void PreTesselate(NodeLayer& nl, const PathRectangle& r, PathRectangle& ur);
-		void Tesselate(NodeLayer& nl, const PathRectangle& r);
-		void Serialize(std::fstream& fStream, unsigned int* streamSize, bool readMode);
+		void PreTesselate(NodeLayer& nl, const SRectangle& r, SRectangle& ur);
+		void Tesselate(NodeLayer& nl, const SRectangle& r);
+		void Serialize(std::fstream& fStream, NodeLayer& nodeLayer, unsigned int* streamSize, bool readMode);
 
 		bool IsLeaf() const;
 		bool CanSplit(bool forced) const;
@@ -164,21 +166,23 @@ namespace QTPFS {
 		void SetMagicNumber(unsigned int number) { currMagicNum = number; }
 		unsigned int GetMagicNumber() const { return currMagicNum; }
 
-		static const unsigned int CHILD_COUNT = 4;
-		static const unsigned int MIN_SIZE_X = 8;
-		static const unsigned int MIN_SIZE_Z = 8;
-		static const unsigned int MAX_DEPTH = 16;
+		static unsigned int MinSizeX() { return MIN_SIZE_X; }
+		static unsigned int MinSizeZ() { return MIN_SIZE_Z; }
 
 	private:
 		bool UpdateMoveCost(
 			const NodeLayer& nl,
-			const PathRectangle& r,
+			const SRectangle& r,
 			unsigned int& numNewBinSquares,
 			unsigned int& numDifBinSquares,
 			unsigned int& numClosedSquares,
 			bool& wantSplit,
 			bool& needSplit
 		);
+
+		static unsigned int MIN_SIZE_X;
+		static unsigned int MIN_SIZE_Z;
+		static unsigned int MAX_DEPTH;
 
 		unsigned int _depth;
 		unsigned int _xminxmax;

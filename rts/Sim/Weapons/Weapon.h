@@ -32,20 +32,19 @@ public:
 
 	void DependentDied(CObject* o);
 
-	bool AllowWeaponTargetCheck();
-	bool TargetUnitOrPositionInWater(const float3& targetPos, const CUnit* targetUnit) const;
+
 	bool CheckTargetAngleConstraint(const float3& worldTargetDir, const float3& worldWeaponDir) const;
 	bool SetTargetBorderPos(CUnit*, float3&, float3&, float3&);
 	bool GetTargetBorderPos(const CUnit*, const float3&, float3&, float3&) const;
 
 	/// test if the weapon is able to attack an enemy/mapspot just by its properties (no range check, no FreeLineOfFire check, ...)
-	virtual bool TestTarget(const float3& pos, bool userTarget, CUnit* unit) const;
+	virtual bool TestTarget(const float3& pos, bool userTarget, const CUnit* unit) const;
 	/// test if the enemy/mapspot is in range/angle
-	bool TestRange(const float3& pos, bool userTarget, CUnit* unit) const;
+	bool TestRange(const float3& pos, bool userTarget, const CUnit* unit) const;
 	/// test if something is blocking our LineOfFire
-	virtual bool HaveFreeLineOfFire(const float3& pos, bool userTarget, CUnit* unit) const;
+	virtual bool HaveFreeLineOfFire(const float3& pos, bool userTarget, const CUnit* unit) const;
 
-	bool TryTarget(const float3& pos, bool userTarget, CUnit* unit) const;
+	bool TryTarget(const float3& pos, bool userTarget, const CUnit* unit) const;
 	bool TryTarget(CUnit* unit, bool userTarget);
 	bool TryTargetRotate(CUnit* unit, bool userTarget);
 	bool TryTargetRotate(float3 pos, bool userTarget);
@@ -74,8 +73,20 @@ public:
 protected:
 	virtual void FireImpl() {}
 
+	void UpdateTargeting();
+	void UpdateFire();
+	void UpdateStockpile();
+	void UpdateSalvo();
+
+	static bool TargetUnitOrPositionInUnderWater(const float3& targetPos, const CUnit* targetUnit);
+	static bool TargetUnitOrPositionInWater(const float3& targetPos, const CUnit* targetUnit);
+
 protected:
 	ProjectileParams GetProjectileParams();
+
+private:
+	inline bool AllowWeaponTargetCheck();
+	void UpdateRelWeaponPos();
 
 public:
 	CUnit* owner;

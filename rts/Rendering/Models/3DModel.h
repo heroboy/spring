@@ -7,9 +7,9 @@
 #include <string>
 #include <set>
 #include <map>
+#include "Rendering/GL/VBO.h"
 #include "System/Matrix44f.h"
 
-#define USE_PIECE_GEOMETRY_VBOS
 
 enum ModelType {
 	MODELTYPE_3DO   = 0,
@@ -17,16 +17,6 @@ enum ModelType {
 	MODELTYPE_OBJ   = 2,
 	MODELTYPE_ASS   = 3, // Model loaded by Assimp library
 	MODELTYPE_OTHER = 4  // For future use. Still used in some parts of code.
-};
-
-enum VBOType {
-	VBO_VERTICES  = 0,
-	VBO_VNORMALS  = 1,
-	VBO_STANGENTS = 2,
-	VBO_TTANGENTS = 3,
-	VBO_VTEXCOORS = 4,
-	VBO_VINDICES  = 5,
-	VBO_NUMTYPES  = 6,
 };
 
 struct CollisionVolume;
@@ -47,19 +37,20 @@ typedef std::map<std::string, S3DModelPiece*> ModelPieceMap;
 
 struct S3DModelPiece {
 	S3DModelPiece();
-
 	virtual ~S3DModelPiece();
+
+	virtual unsigned int CreateDrawForList() const;
 	virtual void UploadGeometryVBOs() {}
-	virtual void DrawForList() const = 0;
+
 	virtual unsigned int GetVertexCount() const { return 0; }
 	virtual unsigned int GetNormalCount() const { return 0; }
 	virtual unsigned int GetTxCoorCount() const { return 0; }
-	virtual void SetMinMaxExtends() {}
-	virtual void SetVertexTangents() {}
+
 	virtual const float3& GetVertexPos(const int) const = 0;
 	virtual const float3& GetNormal(const int) const = 0;
 	virtual float3 GetPosOffset() const { return ZeroVector; }
 	virtual void Shatter(float, int, int, const float3&, const float3&) const {}
+
 	void DrawStatic() const;
 
 	void SetCollisionVolume(CollisionVolume* cv) { colvol = cv; }
@@ -68,6 +59,9 @@ struct S3DModelPiece {
 
 	unsigned int GetChildCount() const { return children.size(); }
 	S3DModelPiece* GetChild(unsigned int i) const { return children[i]; }
+
+	unsigned int GetDisplayListID() const { return dispListID; }
+	void SetDisplayListID(unsigned int id) { dispListID = id; }
 
 public:
 	std::string name;
@@ -78,10 +72,8 @@ public:
 	S3DModelPiece* parent;
 	CollisionVolume* colvol;
 
-	bool isEmpty;
-	unsigned int dispListID;
-
 	ModelType type;
+	bool isEmpty;
 
 	float3 mins;
 	float3 maxs;
@@ -91,9 +83,12 @@ public:
 	float3 scale;
 
 protected:
-	#ifdef USE_PIECE_GEOMETRY_VBOS
-	unsigned int vboIDs[VBO_NUMTYPES];
-	#endif
+	virtual void DrawForList() const = 0;
+
+	unsigned int dispListID;
+
+	VBO vboIndices;
+	VBO vboAttributes;
 };
 
 
@@ -128,6 +123,7 @@ struct S3DModel
 	S3DModelPiece* GetRootPiece() const { return rootPiece; }
 	void SetRootPiece(S3DModelPiece* p) { rootPiece = p; }
 	void DrawStatic() const { rootPiece->DrawStatic(); }
+	void DeletePieces(S3DModelPiece* piece);
 	S3DModelPiece* FindPiece(const std::string& name) const;
 
 public:
@@ -290,7 +286,7 @@ struct LocalModel
 	const CMatrix44f& GetRawPieceMatrix(int pieceIdx) const { return pieces[pieceIdx]->GetModelSpaceMatrix(); }
 
 private:
-	LocalModelPiece* CreateLocalModelPieces(const S3DModelPiece* mpParent, size_t pieceNum = 0);
+	LocalModelPiece* CreateLocalModelPieces(const S3DModelPiece* mpParent);
 
 public:
 	const S3DModel* original;

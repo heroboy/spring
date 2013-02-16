@@ -86,19 +86,21 @@ void CGameHelper::DoExplosionDamage(
 		return;
 	}
 
-	float3 colVolPos;
+	const LocalModelPiece* lap = unit->GetLastAttackedPiece(gs->frameNum);
+	const CollisionVolume* vol = CollisionVolume::GetVolume(unit, lap);
 
-	const CollisionVolume* colVol = CollisionVolume::GetVolume(unit, colVolPos);
+	const float3& lapPos = (lap != NULL && vol == lap->GetCollisionVolume())? lap->GetAbsolutePos(): ZeroVector;
+	const float3& volPos = vol->GetWorldSpacePos(unit, lapPos);
 
 	// linear damage falloff with distance
-	const float expDist = colVol->GetPointDistance(unit, expPos);
+	const float expDist = vol->GetPointSurfaceDistance(unit, lap, expPos);
 	const float expRim = expDist * expEdgeEffect;
 
 	// return early if (distance > radius)
 	if (expDist >= expRadius)
 		return;
 
-	// expEdgeEffect should be in [0, 1], so expDist >= expDist*expEdgeEffect
+	// expEdgeEffect should be in [0, 1], so expRadius >= expDist >= expDist*expEdgeEffect
 	assert(expRadius >= expRim);
 
 	// expMod will also be in [0, 1], no negatives
@@ -127,7 +129,7 @@ void CGameHelper::DoExplosionDamage(
 	const float rawImpulseScale = damages.impulseFactor * expMod * dmgMult;
 	const float modImpulseScale = Clamp(rawImpulseScale, -MAX_EXPLOSION_IMPULSE, MAX_EXPLOSION_IMPULSE);
 
-	const float3 impulseDir = (colVolPos - expPos).SafeNormalize();
+	const float3 impulseDir = (volPos - expPos).SafeNormalize();
 	const float3 expImpulse = impulseDir * modImpulseScale;
 
 	const DamageArray expDamages = damages * expMod;
@@ -150,10 +152,10 @@ void CGameHelper::DoExplosionDamage(
 	const DamageArray& damages,
 	const int weaponDefID
 ) {
-	float3 colVolPos;
+	const CollisionVolume* vol = CollisionVolume::GetVolume(feature, NULL);
+	const float3& volPos = vol->GetWorldSpacePos(feature, ZeroVector);
 
-	const CollisionVolume* colVol = CollisionVolume::GetVolume(feature, colVolPos);
-	const float expDist = colVol->GetPointDistance(feature, expPos);
+	const float expDist = vol->GetPointSurfaceDistance(feature, NULL, expPos);
 	const float expRim = expDist * expEdgeEffect;
 
 	if (expDist >= expRadius)
@@ -167,7 +169,7 @@ void CGameHelper::DoExplosionDamage(
 	const float rawImpulseScale = damages.impulseFactor * expMod * dmgMult;
 	const float modImpulseScale = Clamp(rawImpulseScale, -MAX_EXPLOSION_IMPULSE, MAX_EXPLOSION_IMPULSE);
 
-	const float3 impulseDir = (colVolPos - expPos).SafeNormalize();
+	const float3 impulseDir = (volPos - expPos).SafeNormalize();
 	const float3 expImpulse = impulseDir * modImpulseScale;
 
 	feature->DoDamage(damages * expMod, expImpulse, NULL, weaponDefID);
@@ -618,9 +620,11 @@ void CGameHelper::GenerateWeaponTargets(const CWeapon* weapon, const CUnit* last
 	const float heightMod = weapon->heightMod;
 	const float aHeight   = weapon->weaponPos.y;
 
+	const WeaponDef* weaponDef = weapon->weaponDef;
+
 	// how much damage the weapon deals over 1 second
-	const float secDamage = weapon->weaponDef->damages.GetDefaultDamage() * weapon->salvoSize / weapon->reloadTime * GAME_SPEED;
-	const bool paralyzer  = !!weapon->weaponDef->damages.paralyzeDamageTime;
+	const float secDamage = weaponDef->damages.GetDefaultDamage() * weapon->salvoSize / weapon->reloadTime * GAME_SPEED;
+	const bool paralyzer  = (weaponDef->damages.paralyzeDamageTime != 0);
 
 	const std::vector<int>& quads = qf->GetQuads(pos, radius + (aHeight - std::max(0.f, readmap->initMinHeight)) * heightMod);
 
@@ -657,7 +661,7 @@ void CGameHelper::GenerateWeaponTargets(const CWeapon* weapon, const CUnit* last
 
 				tempTargetUnits[targetUnit->id] = tempNum;
 
-				if (targetUnit->isUnderWater && !weapon->weaponDef->waterweapon) {
+				if (targetUnit->isUnderWater && !weaponDef->waterweapon) {
 					continue;
 				}
 				if (targetUnit->isDead) {
@@ -683,8 +687,8 @@ void CGameHelper::GenerateWeaponTargets(const CWeapon* weapon, const CUnit* last
 				}
 
 				const float dist2D = (pos - targPos).Length2D();
-				const float rangeMul = (dist2D * weapon->weaponDef->proximityPriority + modRange * 0.4f + 100.0f);
-				const float damageMul = weapon->weaponDef->damages[targetUnit->armorType] * targetUnit->curArmorMultiple;
+				const float rangeMul = (dist2D * weaponDef->proximityPriority + modRange * 0.4f + 100.0f);
+				const float damageMul = weaponDef->damages[targetUnit->armorType] * targetUnit->curArmorMultiple;
 
 				targetPriority *= rangeMul;
 
@@ -718,8 +722,7 @@ void CGameHelper::GenerateWeaponTargets(const CWeapon* weapon, const CUnit* last
 				}
 
 				if (luaRules != NULL) {
-					const bool targetAllowed = luaRules->AllowWeaponTarget(attacker->id, targetUnit->id, weapon->weaponNum, weapon->weaponDef->id, &targetPriority);
-					if (!targetAllowed) {
+					if (!luaRules->AllowWeaponTarget(attacker->id, targetUnit->id, weapon->weaponNum, weaponDef->id, &targetPriority)) {
 						continue;
 					}
 				}
@@ -873,12 +876,7 @@ float3 CGameHelper::Pos2BuildPos(const BuildInfo& buildInfo, bool synced)
 		pos.z = math::floor((buildInfo.pos.z + SQUARE_SIZE) / (SQUARE_SIZE * 2)) * SQUARE_SIZE * 2;
 
 	const UnitDef* ud = buildInfo.def;
-	const float bh = uh->GetBuildHeight(pos, ud, synced);
-
-	pos.y = bh;
-
-	if (ud->floatOnWater && bh < 0.0f)
-		pos.y = -ud->waterline;
+	pos.y = uh->GetBuildHeight(pos, ud, synced);
 
 	return pos;
 }

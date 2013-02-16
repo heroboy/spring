@@ -326,7 +326,7 @@ static inline CProjectile* ParseProjectile(lua_State* L,
 	if (!lua_isnumber(L, index)) {
 		luaL_error(L, "%s(): Bad projectile ID", caller);
 	}
-	const ProjectileMapPair* pmp = ph->GetMapPairBySyncedID(lua_toint(L, index));
+	const ProjectileMapValPair* pmp = ph->GetMapPairBySyncedID(lua_toint(L, index));
 	if (pmp == NULL) {
 		return NULL;
 	}
@@ -910,10 +910,10 @@ int LuaSyncedCtrl::CreateUnit(lua_State* L)
 	inCreateUnit = true;
 	UnitLoadParams params;
 	params.unitDef = unitDef; /// must be non-NULL
-	params.builder = uh->GetUnit(luaL_optint(L, 8, -1)); /// may be NULL
+	params.builder = uh->GetUnit(luaL_optint(L, 10, -1)); /// may be NULL
 	params.pos     = pos;
 	params.speed   = ZeroVector;
-	params.unitID  = luaL_optint(L, 7, -1);
+	params.unitID  = luaL_optint(L, 9, -1);
 	params.teamID  = teamID;
 	params.facing  = facing;
 	params.beingBuilt = beingBuilt;
@@ -1553,17 +1553,17 @@ int LuaSyncedCtrl::SetUnitNanoPieces(lua_State* L)
 		return 0;
 
 	nanoPieces->clear();
+	pieceCache->StopPolling();
 	luaL_checktype(L, 2, LUA_TTABLE);
 
 	for (lua_pushnil(L); lua_next(L, 2) != 0; lua_pop(L, 1)) {
 		if (lua_israwnumber(L, -1)) {
-			const int piecenum  = lua_toint(L, -1) - 1;
-			const int scriptnum = unit->script->ModelToScript(piecenum);
+			const int modelPieceNum = lua_toint(L, -1) - 1; //lua 1-indexed, c++ 0-indexed
 
-			if (scriptnum >= 0) {
-				nanoPieces->push_back(scriptnum);
+			if (unit->localModel->HasPiece(modelPieceNum)) {
+				nanoPieces->push_back(modelPieceNum);
 			} else {
-				luaL_error(L, "Incorrect piecenum to SetUnitNanoPieces()");
+				luaL_error(L, "[SetUnitNanoPieces] incorrect model-piece number %d", modelPieceNum);
 			}
 		}
 	}
@@ -2162,7 +2162,13 @@ int LuaSyncedCtrl::AddUnitImpulse(lua_State* L)
 	const float3 impulse(Clamp(luaL_checkfloat(L, 2), -MAX_EXPLOSION_IMPULSE, MAX_EXPLOSION_IMPULSE),
 	                     Clamp(luaL_checkfloat(L, 3), -MAX_EXPLOSION_IMPULSE, MAX_EXPLOSION_IMPULSE),
 	                     Clamp(luaL_checkfloat(L, 4), -MAX_EXPLOSION_IMPULSE, MAX_EXPLOSION_IMPULSE));
-	unit->AddImpulse(impulse);
+
+	if (lua_isnumber(L, 5)) {
+		unit->StoreImpulse(impulse, lua_tonumber(L, 5));
+	} else {
+		unit->StoreImpulse(impulse);
+	}
+
 	return 0;
 }
 

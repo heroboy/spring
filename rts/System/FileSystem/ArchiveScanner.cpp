@@ -23,6 +23,7 @@
 #include "System/Exceptions.h"
 #include "System/OpenMP_cond.h"
 #if       !defined(DEDICATED) && !defined(UNITSYNC)
+#include "System/Platform/Threading.h"
 #include "System/Platform/Watchdog.h"
 #endif // !defined(DEDICATED) && !defined(UNITSYNC)
 
@@ -733,7 +734,11 @@ unsigned int CArchiveScanner::GetCRC(const std::string& arcName)
 	//!       in the metainformation of the container and so the loading is much faster. Neither does any of our
 	//!       current (2011) packing libraries support multithreading :/
 	int i;
-	#pragma omp parallel for private(i)
+#if !defined(DEDICATED) && !defined(UNITSYNC)
+//	Threading::OMPCheck();
+#endif
+//	This is currently used too early, OMP is not initialized here
+//	#pragma omp parallel for private(i)
 	for (i=0; i<crcs.size(); ++i) {
 		CRCPair& crcp = crcs[i];
 		const unsigned int nameCRC = CRC().Update(crcp.filename->data(), crcp.filename->size()).GetDigest();

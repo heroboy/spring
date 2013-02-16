@@ -89,8 +89,10 @@ public:
 
 	virtual void DoDamage(const DamageArray& damages, const float3& impulse, CUnit* attacker, int weaponDefID);
 	virtual void DoWaterDamage();
-	virtual void AddImpulse(const float3&);
 	virtual void FinishedBuilding(bool postInit);
+
+	void StoreImpulse(const float3& impulse, float newImpulseDecayRate);
+	void StoreImpulse(const float3& impulse);
 
 	bool AttackUnit(CUnit* unit, bool isUserTarget, bool wantManualFire, bool fpsMode = false);
 	bool AttackGround(const float3& pos, bool isUserTarget, bool wantManualFire, bool fpsMode = false);
@@ -121,8 +123,10 @@ public:
 		lastAttackedPiece      = p;
 		lastAttackedPieceFrame = f;
 	}
-	bool HaveLastAttackedPiece(int f) const {
-		return (lastAttackedPiece != NULL && lastAttackedPieceFrame == f);
+	LocalModelPiece* GetLastAttackedPiece(int f) const {
+		if (lastAttackedPieceFrame == f)
+			return lastAttackedPiece;
+		return NULL;
 	}
 
 	void DependentDied(CObject* o);
@@ -453,8 +457,6 @@ public:
 	/// multiply all damage the unit take with this
 	float curArmorMultiple;
 
-	std::string tooltip;
-
 	/// used for innacuracy with radars etc
 	float3 posErrorVector;
 	float3 posErrorDelta;
@@ -508,13 +510,14 @@ public:
 	std::vector<float> lodLengths;
 	LuaUnitMaterial luaMats[LUAMAT_TYPE_COUNT];
 
-#ifdef USE_GML
-	/// last draw frame
 	int lastDrawFrame;
+	unsigned int lastUnitUpdate;
+
+#ifdef USE_GML
 	boost::recursive_mutex lodmutex;
 #endif
 
-	unsigned lastUnitUpdate;
+	std::string tooltip;
 
 	bool CommandQueEmpty() const;
 #if STABLE_UPDATE
@@ -579,7 +582,7 @@ public:
 	void QueMoveUnitOldPos(CSolidObject *o, bool delay = Threading::multiThreadedSim);
 	void QueChangeTargetHeading(int heading, bool delay = Threading::multiThreadedSim);
 	void QueSmokeProjectile(bool delay = Threading::multiThreadedSim);
-	void QueAddImpulse(CSolidObject *o, float massScale, bool delay = Threading::multiThreadedSim);
+	void QueAddImpulse(CSolidObject *o, const float3& massScale, bool delay = Threading::multiThreadedSim);
 	void QueUpdateLOS(bool delay = Threading::multiThreadedSim);
 	void QueUpdateRadar(bool delay = Threading::multiThreadedSim);
 	void QueUpdateQuad(bool delay = Threading::multiThreadedSim);

@@ -4,14 +4,14 @@
 
 #include "PathCache.hpp"
 #include "PathDefines.hpp"
-#include "PathRectangle.hpp"
 
 #include "Sim/Misc/GlobalConstants.h"
 #include "Sim/Misc/CollisionHandler.h"
 #include "Sim/Misc/CollisionVolume.h"
 #include "Sim/Objects/SolidObject.h"
+#include "System/Rectangle.h"
 
-static void GetRectangleCollisionVolume(const QTPFS::PathRectangle& r, CollisionVolume& v, float3& rm) {
+static void GetRectangleCollisionVolume(const SRectangle& r, CollisionVolume& v, float3& rm) {
 	float3 vScales;
 
 	// rectangle dimensions (WS)
@@ -172,7 +172,7 @@ void QTPFS::PathCache::DelPath(unsigned int pathID) {
 
 
 
-bool QTPFS::PathCache::MarkDeadPaths(const QTPFS::PathRectangle& r) {
+bool QTPFS::PathCache::MarkDeadPaths(const SRectangle& r) {
 	#ifdef QTPFS_IGNORE_DEAD_PATHS
 	return false;
 	#endif
@@ -209,7 +209,7 @@ bool QTPFS::PathCache::MarkDeadPaths(const QTPFS::PathRectangle& r) {
 		// figure out if <path> has at least one edge crossing <r>
 		// we only care about the segments we have not yet visited
 		const unsigned int minIdx = std::max(path->GetNextPointIndex(), 2U) - 2;
-		const unsigned int maxIdx = std::max(path->NumPoints(), 1U) - 1;
+		const unsigned int maxIdx = std::max(path->NumPoints(), 1u) - 1;
 
 		for (unsigned int i = minIdx; i < maxIdx; i++) {
 			const float3& p0 = path->GetPoint(i    );

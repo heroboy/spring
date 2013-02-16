@@ -3,6 +3,13 @@ Spring changelog
 (numbers in brackets normally mean the mantis ticket ID)
 
 
+-- 9x.0 ---------------------------------------------------------
+
+Misc:
+ - support double-resolution yardmaps for buildings (these require four times as many characters, beware)
+   the engine will interpret a yardmap string as such if its FIRST (and ONLY its first) character is 'h'
+
+
 -- 92.0 ---------------------------------------------------------
 Major Changes:
  - Linux cross-distro binary builds
@@ -10,12 +17,13 @@ Major Changes:
  - new cmdline arguments
  - better pathing
  - add experimental map generator (see http://springrts.com/wiki/Mapgen for details)
-FIXME - spring-mt is merged into spring (default disabled, games can enable it with ...)
+ - some new sim/weapon features
 
 AI:
  - Shard update
- - AAI: stability & code fixes
  - AAI: refactor / fixes
+ - AAI: add BAR config
+ - AAI: update XTA config, to work with XTA > 9.71
  - fix bug in /aikill
 
 pr-download:
@@ -23,7 +31,7 @@ pr-download:
  - fixes / speedups
  - add c-api to shared lib & use it for pr-downloader
 
-Unitsync
+Unitsync:
  ! fix return in GetInfoMapSize (#2996)
  - no crashes in unitsync without init any more (#3120)
  ! ProcessUnits, GetUnitCount, GetMapCount, GetMapArchiveCount,
@@ -34,7 +42,10 @@ Unitsync
    GetOptionStringMaxLen, GetOptionListCount and GetModValidMapCount
    returns now -1/-1.0f on error
 
-Lua
+Lua:
+ ! make TeamHandler::IsActiveTeam check Team::isDead
+ ! gl.UnitPieceMatrix & gl.UnitPieceMultMatrix do now the same and work from UnitSpace & aren't recursive anymore (don't depend on the parent-piece)
+ ! remove LuaLobby
  - enable luasocket as default and always allow to listen (UDP & TCP)
  - new Spring.GetTerrainTypeData (already on wiki)
  - new Spring.GetUnitCurrentBuildPower(unitID) -> number 0..1 
@@ -45,12 +56,26 @@ Lua
  - Lua: make Spring.GetPlayerRoster really return a boolean for spectator as the wiki says
  - fix crash when calling Script.Kill() (3292)
  - fix Spring.GetUnitNearestAlly takes self into account (3293)
- ! make TeamHandler::IsActiveTeam check Team::isDead
- ! gl.UnitPieceMatrix & gl.UnitPieceMultMatrix do now the same and work from UnitSpace & aren't recursive anymore (don't depend on the parent-piece)
- ! remove LuaLobby
  - Spring.SetTerrainTypeData now only updates pathfinder when there is a real change (performance)
  - fix crash in LuaUnitDefs when trying to read deathExpWeaponDef (#3333 & #3325)
  - add Spring.GetReplayLength()
+ - add Spring.GetConfigParams()
+ - add Spring.GetUnitWeaponTryTarget(uid, wid, [number posx, number posy, number posz] | [number enemyid]) -> nil | boolean
+ - fix error spam on malformed Lua-issued unload commands (#3378)
+ - fix crash caused by comparing strings with numbers in base-content's weapondefs_post.lua
+ - add mapHardness to the Game constants table (#3390); make Spring.GetGroundInfo now match its wiki documentation
+ - make Create{Feature, Unit} take an optional (7th, 9th) {feature,unit}ID argument to spawn a feature/unit with a specific ID
+ - make CreateUnit take an optional (10th) builderID argument
+ ! deprecate LuaUnitDefs.extractSquare
+ ! replace LuaFeatureDefs.deathFeature(string) by LuaFeatureDefs.deathFeatureID(number)
+ - fix crash in Spring.GetVisibleFeatures (#3400)
+ - fix Spring.GetFeatureDirection returning direction in (x,z)-plane only (#1599)
+ ! couple the AllowWeapon* callins to SetWatchWeapon state
+ - add optional 4th argument to Spring.SetUnitImpulse to control a unit's impulse decay-rate (now unhardcoded)
+ ! Game.version now returns the same as `spring --sync-version`, e.g. "92.0" or "91.0.1-1283-gf3805a7"
+ - new Game.buildFlags (unsynced only) to get additional engine buildflags, e.g. "OMP" or "MT-Sim DEBUG"
+ - Better notification and protection from unbalanced OpenGL matrix stack after return from Lua rendering code
+
 
 CollisionVolumes:
  ! drop support for ellipsoid-cylinders and ellipsoids
@@ -59,20 +84,29 @@ CollisionVolumes:
     no more distance approximations means no more invincible units (or features)
     and no more general "weird" cases like 3103
     THIS WILL CAUSE BALANCE CHANGES, BE PREPARED
- ! get rid of TYPE_FOOTPRINT, it was an alias for TYPE_SPHERE in the continuous case which is now default and the original intent (a shape defined by the CSG 	intersection of sphere and footprint) would have been tricky to get right
+ ! get rid of TYPE_FOOTPRINT, it was an alias for TYPE_SPHERE in the continuous case which is now default and the
+   original intent (a shape defined by the CSG intersection of sphere and footprint) would have been tricky to get
+   right
     instead support a {Unit,Feature}Def key "useFootPrintCollisionVolume" which
     makes a collision volume a box with dimensions equal to the object's footprint
     (this overrides any custom scaling and/or offsets)
  ! let projectiles explode _on_ collision volumes and not in a interpolated pos in front of it
+ - rework projectile-vs-volume special cases so they can be distinguished better for the above
+ ! rewrite TraceRay::{TestConeHelper, TestTrajectoryConeHelper} for #3399
+      these now no longer use any bounding-radius approximations to
+      figure out if an object will potentially be hit, but calculate
+      the exact colvol surface distance taking spread into account
 
 Pathing:
  - faster updates
- - legacy: use omp in ::Update to multithread a function that eats 40% of the time spend in ::Update
+ - legacy: use omp in ::Update to multithread a function that eats 40% of the time spent in ::Update
    - this gives a _massive_ boost with like >30% more FPS
    - it needs low latency omp threads to work, those are currently broken in gomp, the bug will be fixed with the next release of gcc
- - QTPFS: a lot fixes & optimizations, fixed desync (#3339)
+ - QTPFS: a lot of fixes & optimizations, fixed dev-build desync (#3339), made cache reads/writes atomic, read constants from MapInfo
  - give pathfinder debug-data drawing its own shortcut (alt+p)
- - GMT: rewrite collision handling between units and static objects (again)   instead of using impulse to push units away, do SCII-style strafing   result: www.youtube.com/watch?v=4rycY4JfLGs
+ - rewrite collision handling between units and static objects (again)
+    instead of using impulse to push units away, do SCII-style strafing
+    results: www.youtube.com/watch?v=4rycY4JfLGs
  ! put on upper limit on directional slope tolerance for "downhill" slopes
     before, units could move across ANY downhill slope if they ended up there
     and directional checking was enabled; now the downhill slope-tolerance is
@@ -81,12 +115,27 @@ Pathing:
        pro: groups moving without a ctrl-order clump much less
     contra: groups moving with a ctrl-order are less organized
  - fix units moving orthogonally across too-steep faces (and getting stuck afterwards)
+ - fix humping triggered when unit crushes feature and feature spawns a non-crushable
+   replacement (if unit's next waypoint happens to be inside replacement's footprint)
+ - change precondition for crushing units from 'collider must be moving' to 'collider impulse must exceed collidee impulse'
+ - units that are mutually forbidden from pushing each other will no longer get stuck blocking the other party
+ - units moving toward the same spot will no longer clump up into a jiggly ball (#3355 & #3381)
+ - units with low delta-v no longer receive bogus move orders after being told to stop (#3358)
+ - actively push units away from speedmod=0 squares when possible
 
 UnitScripts:
  ! LUS/COB: deprecate QueryNanoPiece() makes SimCode ~10% faster use the new Spring.SetUnitNanoPieces instead
-    Note, once set the engine won't call `QueryNanoPiece` anymore and instead randomly toggles between the set nanopieces, saving a lot time-consuming COB/LUS calls.
+    Note, once set the engine won't call `QueryNanoPiece` anymore and instead randomly toggles between the set nanopieces,
+    saving a lot time-consuming COB/LUS calls.
  ! LUS/COB: cache QueryNanoPiece() results
-    Note, this stops QueryNanoPiece() calls after 31 times no matter what! This breaks ZK's LupsNanoSpray, fixed version can be found here http://gw.gd/Zaae.
+    Note, this stops QueryNanoPiece() calls after 31 times no matter what!
+    This breaks ZK's LupsNanoSpray, fixed version can be found here http://gw.gd/Zaae.
+
+Models/Assimp:
+ - support a 2nd texcoord
+ - auto-calc midPos
+ - read texture filepaths from modelfile if available
+ - extended auto-finding of textures
 
 Weapons/WeaponDefs:
  ! remove of manualBombSettings (backward-compability code in weapondefs_post.lua)
@@ -95,13 +144,15 @@ Weapons/WeaponDefs:
  ! removed isShield. Use weaponType="Shield" instead!
  - new 'interceptSolo', if true (=default) don't allow any other interceptors to target the same projectile
  - allow any weapons to be interceptors/targetables (not that all combinations work/make sense)
+ ! stop subs/AA-fighters trying to chase hovers and tanks (check all equipped weapons if they can target the unit, before _auto_ chasing enemies in FireAtWill)
+ ! all weapons will now obey avoidFriendly, avoidNeutral, avoidFeature + avoidGround
+ ! add new avoidGround weapondef tag (default true)
 
 FeatureDefs:
  ! remove "nodrawundergray" now that there is a proper "floating" tag
 
 GameServer:
  - a new GameID tag to script.txt
- ! default enable AllowAdditionalPlayers
  ! always account local players (even when host is a spectator!)
  ! don't lower-limit gameSpeed to `userSpeedFactor * 0.5f` when userSpeedFactor is greater than 2
  - make game ways more responsive when running at high speeds
@@ -110,21 +161,43 @@ Misc:
  - add /ReloadShaders
  - less jerky camera transitions (thx cleanrock)
  - make camera a bit smoother by adding some micro-transitions
+ - pressing F5 no longer hides the minimap in dualscreen mode (#3095)
  - SMF/MapInfo: new tag voidGround
  - fix 'only FreeCamera allows to set FOV ingame' (3291)
  - do not spam unit self-destruct messages when spectating
  - new configtag "StacktraceOnGLErrors": Create a stacktrace when an OpenGL error occurs (only available in DEBUG builds)
  - fix performance leak in CSolidObject::Block()
+ - make UnitScript::{ScriptToModel, ModelToScript} O(1) instead of linear
+   (TODO: UnitScript::HaveListeners is another new O(n) source)
  ! remove OSC
+ - add new `cursorattackbad` mousecursor, used for static defense when giving a CMD_ATTACK
+ - get rid of the 'extractSquare' non-feature for extractor buildings
+ - when a team dies, redistribute unit-limits over the remaining teams in that team's allyteam (also means dead teams can no longer produce any units)
+ - record demos in-memory to make speccheating 1% harder
+ - make hovercraft with non-zero waterline transition into/out of water more smoothly
+ - make unit movement more physically-based:
+     add modrule 'allowGroundUnitGravity'; allows fast units to catch air
+     add modrule 'allowHoverUnitStrafing'; allows hovercraft to slide in turns
+     ground units cannot change speed or direction in mid-air
+ - in god-mode, units can now be selected and commanded by any player even when not spectating (#3412)
+ - fix multiple build-started sounds being played when ordering single builder to construct something
+ ! UnitDef::can{Restore, Repair, Reclaim, Capture, Resurrect} now default to true only if the unit is
+   a builder and has the corresponding {Terraform, Repair, Reclaim, Capture, Resurrect}Speed property
+   set to a non-zero value
 
 Rendering:
  - speedup minimap icon rendering
  - fix a few OpenGL errors reported by MESA drivers
+ - fix SimpleParticleSystem directional particles disappearing (#1665)
  - ROAM: resize pool when running out of nodes fixes rendering on maps like Knockout
  - disable occlusion query in BumpWater it doesn't work and just makes it slower
  - move `lastFrameTime` calculation from the end of a drawframe to the beginning this way vsync locktimes are counted to the previous frame time
  ! removal of DepthBufferBits & StencilBufferBits
  - BumpWater renders now with shadowmap & infotex
+ - clamp map ShadowDensity 0..1 (fixes shadow distortions on maps like Iamma)
+ - use VBOs for S3O and OBJ model piece geometry
+ - fix grass shadow rendering (no self-shadowing yet)
+ ! changed `usable` range of GrassDetail configtag, so you can set it now >10 to increase viewrange w/o getting Tribble plushies
 
 Sim Bugfixes:
  ! stop buildframe decaying on reclaiming
@@ -154,6 +227,11 @@ Sim Bugfixes:
  - fix air transports have trouble loading multiple units if units are large (3307)
  - fix partly reclaiming factory allows unit teleportation/remote destruction (3308)
  - fix 'SetFeaturePosition snapToGround get reset when there is terraform nearby' (3243)
+ ! disable collision checking between transporter & transportee
+ - fix being-built units having order queues overwritten upon completion (#3342)
+ - fix FPE's in {Large}BeamLaserProjectile (#3413 & #3414)
+ - fix impulse not being applied to features (unit wrecks)
+ - allow underwater units to build stuff on the waterplane
 
 Bugfixes:
  - fix network connection is not properly closed when an error occurs in pregame (3166)
@@ -161,6 +239,8 @@ Bugfixes:
  - fix "Transport endpoint is not connected"
  - fix secret exploit
  - fix secret exploit #2
+ - fix memory leaks, particularly when the game is minimized
+ - fix several crashes in multithreaded exe
 
 Cmdline Arguments:
  - new --game (-g) & --map (-m)
@@ -181,6 +261,7 @@ Buildprocess:
  - detect ld.gold and compress debugsymbols
  - update 7z to v9.22
  - use tcmalloc when found (new USE_TCMALLOC use-flag)
+ - add target headercheck
 
 Windows:
  - OpenMP build
@@ -191,6 +272,7 @@ Windows:
 
 Linux:
  - Linux's ctrl+c: `hardkill` after 10sec (and 5 seconds softkill)
+ - workaorund issue in FOSS ati drivers with NPOT cursors
 
 
 -- 91.0 ---------------------------------------------------------
@@ -487,6 +569,7 @@ Installer:
  ! add vcredist_x86.exe to the installer / remove MSVCR71.dll from mingwlibs
  - fixed safemode shortcuts
 
+
 -- 87.0 ---------------------------------------------------------
 Bugfixes:
  ! restore pre86.0 maxAngleDif arcs
@@ -635,7 +718,6 @@ Bugfixes:
  - 'Landed gunships do not follow height reduction' (2823)
 
 
-
 -- 85.0 ---------------------------------------------------------
 Major Changes:
  - ROAM \o/
@@ -735,7 +817,6 @@ Buildbot:
 
 UnitSync:
  - if Init() is called, but we are already initialzied, do a re-initialization
-
 
 
 -- 84.0 ---------------------------------------------------------

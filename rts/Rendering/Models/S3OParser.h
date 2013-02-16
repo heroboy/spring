@@ -5,13 +5,15 @@
 
 #include <map>
 #include "IModelParser.h"
-
+#include "System/Vec2.h"
 
 struct SS3OVertex {
 	float3 pos;
 	float3 normal;
-	float textureX;
-	float textureY;
+	float2 texCoord;
+	float3 sTangent;
+	float3 tTangent;
+	char unused[8]; //Note: ATi wants 64 _byte_ aligned data in VBOs for optimal performance
 };
 
 struct SS3OPiece: public S3DModelPiece {
@@ -34,26 +36,13 @@ struct SS3OPiece: public S3DModelPiece {
 
 	const float3& GetVertexPos(const int idx) const { return vertices[idx].pos; }
 	const float3& GetNormal(const int idx) const { return vertices[idx].normal; }
-	void Shatter(float pieceChance, int texType, int team, const float3& pos,
-			const float3& speed) const;
+	void Shatter(float pieceChance, int texType, int team, const float3& pos, const float3& speed) const;
 
 	int primitiveType;
 
 private:
 	std::vector<SS3OVertex> vertices;
 	std::vector<unsigned int> vertexDrawIndices;
-
-	// cannot store these in SS3OVertex
-	std::vector<float3> sTangents; // == T(angent) dirs
-	std::vector<float3> tTangents; // == B(itangent) dirs
-};
-
-struct SS3OTriangle {
-	unsigned int v0idx;
-	unsigned int v1idx;
-	unsigned int v2idx;
-	float3 sTangent;
-	float3 tTangent;
 };
 
 

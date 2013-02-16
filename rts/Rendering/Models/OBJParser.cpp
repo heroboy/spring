@@ -422,26 +422,18 @@ void COBJParser::BuildModelPieceTreeRec(
 		// for (per-piece) coldet purposes; the model extends do bound
 		// all pieces
 		if (overrideMins) {
-			piece->mins.x = std::min(piece->mins.x, vertexGlobalPos.x);
-			piece->mins.y = std::min(piece->mins.y, vertexGlobalPos.y);
-			piece->mins.z = std::min(piece->mins.z, vertexGlobalPos.z);
+			piece->mins = std::min(piece->mins, vertexGlobalPos);
 		}
 		if (overrideMaxs) {
-			piece->maxs.x = std::max(piece->maxs.x, vertexGlobalPos.x);
-			piece->maxs.y = std::max(piece->maxs.y, vertexGlobalPos.y);
-			piece->maxs.z = std::max(piece->maxs.z, vertexGlobalPos.z);
+			piece->maxs = std::max(piece->maxs, vertexGlobalPos);
 		}
 
 		// we want vertices in piece-space
 		piece->SetVertex(i, vertexLocalPos);
 	}
 
-	model->mins.x = std::min(piece->mins.x, model->mins.x);
-	model->mins.y = std::min(piece->mins.y, model->mins.y);
-	model->mins.z = std::min(piece->mins.z, model->mins.z);
-	model->maxs.x = std::max(piece->maxs.x, model->maxs.x);
-	model->maxs.y = std::max(piece->maxs.y, model->maxs.y);
-	model->maxs.z = std::max(piece->maxs.z, model->maxs.z);
+	model->mins = std::min(piece->mins, model->mins);
+	model->maxs = std::max(piece->maxs, model->maxs);
 
 	const float3 cvScales = piece->maxs - piece->mins;
 	const float3 cvOffset =
@@ -449,7 +441,6 @@ void COBJParser::BuildModelPieceTreeRec(
 		(piece->mins - (localPieceOffsets? piece->goffset: piece->offset));
 
 	piece->SetCollisionVolume(new CollisionVolume("box", cvScales, cvOffset * 0.5f));
-	piece->UploadGeometryVBOs();
 
 	std::vector<int> childPieceNumbers;
 	std::vector<std::string> childPieceNames;
@@ -514,42 +505,47 @@ void COBJParser::BuildModelPieceTreeRec(
 
 void SOBJPiece::UploadGeometryVBOs()
 {
-	#ifdef USE_PIECE_GEOMETRY_VBOS
 	if (isEmpty)
 		return;
 
-	vertexDrawIndices.resize(vertices.size() * 3, 0);
+	vertexDrawIndices.reserve(GetTriangleCount() * 3);
 
 	// generate the index-list; only needed when using VBO's
 	for (unsigned int i = 0; i < GetTriangleCount(); i++) {
 		const SOBJTriangle& tri = GetTriangle(i);
-		vertexDrawIndices[i * 3 + 0] = tri.vIndices[0];
-		vertexDrawIndices[i * 3 + 1] = tri.vIndices[1];
-		vertexDrawIndices[i * 3 + 2] = tri.vIndices[2];
+		vertexDrawIndices.push_back(tri.vIndices[0]);
+		vertexDrawIndices.push_back(tri.vIndices[1]);
+		vertexDrawIndices.push_back(tri.vIndices[2]);
 	}
 
-	glBindBuffer(GL_ARRAY_BUFFER, vboIDs[VBO_VERTICES]);
-	glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float3), &(vertices[0].x), GL_STATIC_DRAW);
+	vboPositions.Bind(GL_ARRAY_BUFFER);
+	vboPositions.Resize(vertices.size() * sizeof(float3), GL_STATIC_DRAW, &vertices[0]);
+	vboPositions.Unbind();
 
-	glBindBuffer(GL_ARRAY_BUFFER, vboIDs[VBO_VNORMALS]);
-	glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float3), &(vnormals[0].x), GL_STATIC_DRAW);
+	vboNormals.Bind(GL_ARRAY_BUFFER);
+	vboNormals.Resize(vnormals.size() * sizeof(float3), GL_STATIC_DRAW, &vnormals[0]);
+	vboNormals.Unbind();
 
-	glBindBuffer(GL_ARRAY_BUFFER, vboIDs[VBO_STANGENTS]);
-	glBufferData(GL_ARRAY_BUFFER, sTangents.size() * sizeof(float3), &(sTangents[0].x), GL_STATIC_DRAW);
-	glBindBuffer(GL_ARRAY_BUFFER, vboIDs[VBO_TTANGENTS]);
-	glBufferData(GL_ARRAY_BUFFER, tTangents.size() * sizeof(float3), &(tTangents[0].x), GL_STATIC_DRAW);
+	vboTexcoords.Bind(GL_ARRAY_BUFFER);
+	vboTexcoords.Resize(texcoors.size() * sizeof(float2), GL_STATIC_DRAW, &texcoors[0]);
+	vboTexcoords.Unbind();
 
-	glBindBuffer(GL_ARRAY_BUFFER, vboIDs[VBO_VTEXCOORS]);
-	glBufferData(GL_ARRAY_BUFFER, texcoors.size() * sizeof(float2), &(texcoors[0].x), GL_STATIC_DRAW);
+	vbosTangents.Bind(GL_ARRAY_BUFFER);
+	vbosTangents.Resize(sTangents.size() * sizeof(float3), GL_STATIC_DRAW, &sTangents[0]);
+	vbosTangents.Unbind();
+
+	vbotTangents.Bind(GL_ARRAY_BUFFER);
+	vbotTangents.Resize(tTangents.size() * sizeof(float3), GL_STATIC_DRAW, &tTangents[0]);
+	vbotTangents.Unbind();
+
+	vboIndices.Bind(GL_ELEMENT_ARRAY_BUFFER);
+	vboIndices.Resize(vertexDrawIndices.size() * sizeof(unsigned int), GL_STATIC_DRAW, &vertexDrawIndices[0]);
+	vboIndices.Unbind();
 
 	// FIXME:
 	//   assumes vIndices, nIndices and tIndices are identical in layout for all vertices
 	//   (not a big problem because OBJ models must have a normal and texcoord per vertex)
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vboIDs[VBO_VINDICES]);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, vertexDrawIndices.size() * sizeof(unsigned int), &(vertexDrawIndices[0]), GL_STATIC_DRAW);
 
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
 
 	// NOTE: wasteful to keep these around, but still needed (eg. for Shatter())
 	// vertices.clear();
@@ -559,7 +555,6 @@ void SOBJPiece::UploadGeometryVBOs()
 	sTangents.clear();
 	tTangents.clear();
 	triangles.clear();
-	#endif
 }
 
 void SOBJPiece::DrawForList() const
@@ -567,37 +562,41 @@ void SOBJPiece::DrawForList() const
 	if (isEmpty)
 		return;
 
-	#ifdef USE_PIECE_GEOMETRY_VBOS
-	glClientActiveTexture(GL_TEXTURE5);
-	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	glBindBuffer(GL_ARRAY_BUFFER, vboIDs[VBO_STANGENTS]);
-	glTexCoordPointer(3, GL_FLOAT, sizeof(float3), NULL);
+	vbosTangents.Bind(GL_ARRAY_BUFFER);
+		glClientActiveTexture(GL_TEXTURE5);
+		glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+		glTexCoordPointer(3, GL_FLOAT, sizeof(float3), vbosTangents.GetPtr());
+	vbosTangents.Unbind();
 
-	glClientActiveTexture(GL_TEXTURE6);
-	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	glBindBuffer(GL_ARRAY_BUFFER, vboIDs[VBO_TTANGENTS]);
-	glTexCoordPointer(3, GL_FLOAT, sizeof(float3), NULL);
+	vbotTangents.Bind(GL_ARRAY_BUFFER);
+		glClientActiveTexture(GL_TEXTURE6);
+		glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+		glTexCoordPointer(3, GL_FLOAT, sizeof(float3), vbotTangents.GetPtr());
+	vbotTangents.Unbind();
 
-	glClientActiveTexture(GL_TEXTURE1);
-	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	glBindBuffer(GL_ARRAY_BUFFER, vboIDs[VBO_VTEXCOORS]);
-	glTexCoordPointer(2, GL_FLOAT, sizeof(float2), NULL);
+	vboTexcoords.Bind(GL_ARRAY_BUFFER);
+		glClientActiveTexture(GL_TEXTURE0);
+		glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+		glTexCoordPointer(2, GL_FLOAT, sizeof(float2), vboTexcoords.GetPtr());
 
-	glClientActiveTexture(GL_TEXTURE0);
-	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	glBindBuffer(GL_ARRAY_BUFFER, vboIDs[VBO_VTEXCOORS]);
-	glTexCoordPointer(2, GL_FLOAT, sizeof(float2), NULL);
+		glClientActiveTexture(GL_TEXTURE1);
+		glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+		glTexCoordPointer(2, GL_FLOAT, sizeof(float2), vboTexcoords.GetPtr());
+	vboTexcoords.Unbind();
 
-	glEnableClientState(GL_VERTEX_ARRAY);
-	glBindBuffer(GL_ARRAY_BUFFER, vboIDs[VBO_VERTICES]);
-	glVertexPointer(3, GL_FLOAT, sizeof(float3), NULL);
+	vboPositions.Bind(GL_ARRAY_BUFFER);
+		glEnableClientState(GL_VERTEX_ARRAY);
+		glVertexPointer(3, GL_FLOAT, sizeof(float3), vboPositions.GetPtr());
+	vboPositions.Unbind();
 
-	glEnableClientState(GL_NORMAL_ARRAY);
-	glBindBuffer(GL_ARRAY_BUFFER, vboIDs[VBO_VNORMALS]);
-	glNormalPointer(GL_FLOAT, sizeof(float3), NULL);
+	vboNormals.Bind(GL_ARRAY_BUFFER);
+		glEnableClientState(GL_NORMAL_ARRAY);
+		glNormalPointer(GL_FLOAT, sizeof(float3), vboNormals.GetPtr());
+	vboNormals.Unbind();
 
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vboIDs[VBO_VINDICES]);
-	glDrawElements(GL_TRIANGLES, vertexDrawIndices.size(), GL_UNSIGNED_INT, NULL);
+	vboIndices.Bind(GL_ELEMENT_ARRAY_BUFFER);
+		glDrawRangeElements(GL_TRIANGLES, 0, vertices.size() - 1, vertexDrawIndices.size(), GL_UNSIGNED_INT, vboIndices.GetPtr());
+	vboIndices.Unbind();
 
 	glClientActiveTexture(GL_TEXTURE6);
 	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
@@ -613,45 +612,6 @@ void SOBJPiece::DrawForList() const
 
 	glDisableClientState(GL_VERTEX_ARRAY);
 	glDisableClientState(GL_NORMAL_ARRAY);
-
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-	#else
-
-	CVertexArray* va = GetVertexArray();
-		va->Initialize();
-		va->EnlargeArrays(GetTriangleCount() * 3, 0, VA_SIZE_TNT);
-
-	for (unsigned int i = 0; i < GetTriangleCount(); i++) {
-		const SOBJTriangle& tri = GetTriangle(i);
-		const float3&
-			v0p = GetVertex(tri.vIndices[0]),
-			v1p = GetVertex(tri.vIndices[1]),
-			v2p = GetVertex(tri.vIndices[2]);
-		const float3&
-			v0n = GetNormal(tri.nIndices[0]),
-			v1n = GetNormal(tri.nIndices[1]),
-			v2n = GetNormal(tri.nIndices[2]);
-		const float3&
-			v0st = GetSTangent(tri.vIndices[0]),
-			v1st = GetSTangent(tri.vIndices[1]),
-			v2st = GetSTangent(tri.vIndices[2]),
-			v0tt = GetTTangent(tri.vIndices[0]),
-			v1tt = GetTTangent(tri.vIndices[1]),
-			v2tt = GetTTangent(tri.vIndices[2]);
-		const float2&
-			v0tc = GetTxCoor(tri.tIndices[0]),
-			v1tc = GetTxCoor(tri.tIndices[1]),
-			v2tc = GetTxCoor(tri.tIndices[2]);
-
-		va->AddVertexQTNT(v0p,  v0tc.x, v0tc.y,  v0n,  v0st, v0tt);
-		va->AddVertexQTNT(v1p,  v1tc.x, v1tc.y,  v1n,  v1st, v1tt);
-		va->AddVertexQTNT(v2p,  v2tc.x, v2tc.y,  v2n,  v2st, v2tt);
-	}
-
-	va->DrawArrayTNT(GL_TRIANGLES);
-	#endif
 }
 
 void SOBJPiece::SetMinMaxExtends()

@@ -60,6 +60,12 @@ public:
 	void AddTxCoor(const float2& v) { texcoors.push_back(v); }
 
 private:
+	VBO vboPositions;
+	VBO vboNormals;
+	VBO vboTexcoords;
+	VBO vbosTangents;
+	VBO vbotTangents;
+
 	std::vector<float3> vertices;
 	std::vector<float3> vnormals;
 	std::vector<float2> texcoors;

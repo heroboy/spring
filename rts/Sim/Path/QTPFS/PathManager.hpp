@@ -13,6 +13,7 @@
 #include "PathSearch.hpp"
 
 struct MoveDef;
+struct SRectangle;
 class CSolidObject;
 
 #ifdef QTPFS_ENABLE_THREADED_UPDATE
@@ -24,12 +25,13 @@ namespace boost {
 #endif
 
 namespace QTPFS {
-	struct PathRectangle;
 	struct QTNode;
 	class PathManager: public IPathManager {
 	public:
 		PathManager();
 		~PathManager();
+
+		static void InitStatic();
 
 		unsigned int GetPathFinderType() const { return PFS_TYPE_QTPFS; }
 		boost::uint32_t GetPathCheckSum() const { return pfsCheckSum; }
@@ -38,6 +40,7 @@ namespace QTPFS {
 
 		void TerrainChange(ST_FUNC unsigned int x1, unsigned int z1,  unsigned int x2, unsigned int z2, unsigned int type);
 		void Update(ST_FUNC int unused = 0);
+		void UpdateFull(ST_FUNC int unused = 0);
 		void UpdatePath(ST_FUNC const CSolidObject* owner, unsigned int pathID);
 		void DeletePath(ST_FUNC unsigned int pathID);
 
@@ -45,22 +48,22 @@ namespace QTPFS {
 
 		unsigned int RequestPath(
 			ST_FUNC
+			CSolidObject* object,
 			const MoveDef* moveDef,
 			const float3& sourcePos,
 			const float3& targetPos,
 			float radius,
-			CSolidObject* object,
 			bool synced
 		);
 
 		float3 NextWayPoint(
 			ST_FUNC
+			const CSolidObject*, // owner
 			unsigned int pathID,
+			unsigned int, // numRetries
 			float3 point,
-			float radius = 0.0f,
-			int = 0, // numRetries
-			const CSolidObject* = 0, // owner
-			bool synced = true
+			float radius,
+			bool synced
 		);
 
 		void GetPathWayPoints(
@@ -70,10 +73,7 @@ namespace QTPFS {
 			std::vector<int>& starts
 		) const;
 
-		static NodeLayer* GetSerializingNodeLayer() { return serializingNodeLayer; }
-
-		static const unsigned int LAYERS_PER_UPDATE =  5;
-		static const unsigned int MAX_TEAM_SEARCHES = 25;
+		int2 GetNumQueuedUpdates() const;
 
 	private:
 		void ThreadUpdate();
@@ -84,7 +84,7 @@ namespace QTPFS {
 		typedef void (PathManager::*MemberFunc)(
 			unsigned int threadNum,
 			unsigned int numThreads,
-			const PathRectangle& rect
+			const SRectangle& rect
 		);
 		typedef std::map<unsigned int, unsigned int> PathTypeMap;
 		typedef std::map<unsigned int, unsigned int>::iterator PathTypeMapIt;
@@ -95,26 +95,26 @@ namespace QTPFS {
 		typedef std::list<IPathSearch*> PathSearchList;
 		typedef std::list<IPathSearch*>::iterator PathSearchListIt;
 
-		void SpawnBoostThreads(MemberFunc f, const PathRectangle& r);
+		void SpawnBoostThreads(MemberFunc f, const SRectangle& r);
 
-		void InitNodeLayersThreaded(const PathRectangle& rect);
-		void UpdateNodeLayersThreaded(const PathRectangle& rect);
+		void InitNodeLayersThreaded(const SRectangle& rect);
+		void UpdateNodeLayersThreaded(const SRectangle& rect);
 		void InitNodeLayersThread(
 			unsigned int threadNum,
 			unsigned int numThreads,
-			const PathRectangle& rect
+			const SRectangle& rect
 		);
 		void UpdateNodeLayersThread(
 			unsigned int threadNum,
 			unsigned int numThreads,
-			const PathRectangle& rect
+			const SRectangle& rect
 		);
-		void InitNodeLayer(unsigned int layerNum, const PathRectangle& r);
-		void UpdateNodeLayer(unsigned int layerNum, const PathRectangle& r);
+		void InitNodeLayer(unsigned int layerNum, const SRectangle& r);
+		void UpdateNodeLayer(unsigned int layerNum, const SRectangle& r);
 
 		#ifdef QTPFS_STAGGERED_LAYER_UPDATES
-		void QueueNodeLayerUpdates(const PathRectangle& r);
-		void ExecQueuedNodeLayerUpdates(unsigned int layerNum);
+		void QueueNodeLayerUpdates(const SRectangle& r);
+		void ExecQueuedNodeLayerUpdates(unsigned int layerNum, bool flushQueue);
 		#endif
 
 		void ExecuteQueuedSearches(unsigned int pathType);
@@ -130,7 +130,7 @@ namespace QTPFS {
 			const bool synced
 		);
 
-		void ExecuteSearch(
+		bool ExecuteSearch(
 			PathSearchList& searches,
 			PathSearchListIt& searchesIt,
 			NodeLayer& nodeLayer,
@@ -155,8 +155,8 @@ namespace QTPFS {
 		std::vector<unsigned int> numCurrExecutedSearches;
 		std::vector<unsigned int> numPrevExecutedSearches;
 
-
-		static NodeLayer* serializingNodeLayer;
+		static unsigned int LAYERS_PER_UPDATE;
+		static unsigned int MAX_TEAM_SEARCHES;
 
 		unsigned int searchStateOffset;
 		unsigned int numTerrainChanges;

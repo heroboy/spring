@@ -72,7 +72,7 @@ void CBombDropper::Update()
 	CWeapon::Update();
 }
 
-bool CBombDropper::TestTarget(const float3& pos, bool userTarget, CUnit* unit) const
+bool CBombDropper::TestTarget(const float3& pos, bool userTarget, const CUnit* unit) const
 {
 	ASSERT_SINGLETHREADED_SIM();
 	if (unit) {
@@ -87,7 +87,7 @@ bool CBombDropper::TestTarget(const float3& pos, bool userTarget, CUnit* unit) c
 	return CWeapon::TestTarget(pos, userTarget, unit);
 }
 
-bool CBombDropper::HaveFreeLineOfFire(const float3& pos, bool userTarget, CUnit* unit) const
+bool CBombDropper::HaveFreeLineOfFire(const float3& pos, bool userTarget, const CUnit* unit) const
 {
 	//TODO write me
 	return true;

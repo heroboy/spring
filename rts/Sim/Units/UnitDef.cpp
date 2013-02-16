@@ -140,7 +140,7 @@ UnitDef::UnitDef()
 	, maxWeaponRange(0.0f)
 	, maxCoverage(0.0f)
 	, deathExpWeaponDef(NULL)
-	, selfdExpWeaponDef(0)
+	, selfdExpWeaponDef(NULL)
 	, buildPic(NULL)
 	, selfDCountdown(0)
 	, builder(false)
@@ -308,7 +308,6 @@ UnitDef::UnitDef(const LuaTable& udTable, const std::string& unitName, int id)
 	}
 
 
-	builder = udTable.GetBool("builder", false);
 	buildRange3D = udTable.GetBool("buildRange3D", false);
 	// 128.0f is the ancient default
 	buildDistance = udTable.GetFloat("buildDistance", 128.0f);
@@ -316,10 +315,10 @@ UnitDef::UnitDef(const LuaTable& udTable, const std::string& unitName, int id)
 	// to not overlap for a 1x1 constructor building a 1x1 structure
 	buildDistance = std::max(38.0f, buildDistance);
 	buildSpeed = udTable.GetFloat("workerTime", 0.0f);
-	builder = builder && (buildSpeed > 0.0f);
+	builder = udTable.GetBool("builder", false) && (buildSpeed > 0.0f);
 
 	repairSpeed    = udTable.GetFloat("repairSpeed",    buildSpeed);
-	maxRepairSpeed = udTable.GetFloat("maxRepairSpeed", 1e20f);
+	maxRepairSpeed = udTable.GetFloat("maxRepairSpeed",      1e20f);
 	reclaimSpeed   = udTable.GetFloat("reclaimSpeed",   buildSpeed);
 	resurrectSpeed = udTable.GetFloat("resurrectSpeed", buildSpeed);
 	captureSpeed   = udTable.GetFloat("captureSpeed",   buildSpeed);
@@ -336,16 +335,20 @@ UnitDef::UnitDef(const LuaTable& udTable, const std::string& unitName, int id)
 	canPatrol    = udTable.GetBool("canPatrol",       true);
 	canGuard     = udTable.GetBool("canGuard",        true);
 	canRepeat    = udTable.GetBool("canRepeat",       true);
-	canResurrect = udTable.GetBool("canResurrect",    false);
-	canCapture   = udTable.GetBool("canCapture",      false);
 	canCloak     = udTable.GetBool("canCloak",        (udTable.GetFloat("cloakCost", 0.0f) != 0.0f));
 	canSelfD     = udTable.GetBool("canSelfDestruct", true);
 	canKamikaze  = udTable.GetBool("kamikaze",        false);
 
-	canRestore   = udTable.GetBool("canRestore", builder);
-	canRepair    = udTable.GetBool("canRepair",  builder);
-	canReclaim   = udTable.GetBool("canReclaim", builder);
-	canAssist    = udTable.GetBool("canAssist",  builder);
+	// capture and resurrect count as special abilities
+	// (because captureSpeed and resurrectSpeed default
+	// to buildSpeed, canCapture and canResurrect would
+	// otherwise become true for all regular builders)
+	canRestore   = udTable.GetBool("canRestore",   builder) && (terraformSpeed > 0.0f);
+	canRepair    = udTable.GetBool("canRepair",    builder) && (   repairSpeed > 0.0f);
+	canReclaim   = udTable.GetBool("canReclaim",   builder) && (  reclaimSpeed > 0.0f);
+	canCapture   = udTable.GetBool("canCapture",     false) && (  captureSpeed > 0.0f);
+	canResurrect = udTable.GetBool("canResurrect",   false) && (resurrectSpeed > 0.0f);
+	canAssist    = udTable.GetBool("canAssist",    builder);
 
 	canBeAssisted = udTable.GetBool("canBeAssisted", true);
 	canSelfRepair = udTable.GetBool("canSelfRepair", false);
@@ -625,14 +628,8 @@ UnitDef::UnitDef(const LuaTable& udTable, const std::string& unitName, int id)
 	activateWhenBuilt = udTable.GetBool("activateWhenBuilt", false);
 	onoffable = udTable.GetBool("onoffable", false);
 
-	// footprint sizes are assumed to be expressed in TA-engine units;
-	// Spring's heightmap resolution is double the footprint (yardmap)
-	// resolution, so we scale the values (which are not allowed to be
-	// 0)
-	// NOTE that this is done for the FeatureDef and MoveDef footprints
-	// as well
-	xsize = std::max(1 * 2, (udTable.GetInt("footprintX", 1) * 2));
-	zsize = std::max(1 * 2, (udTable.GetInt("footprintZ", 1) * 2));
+	xsize = std::max(1 * SPRING_FOOTPRINT_SCALE, (udTable.GetInt("footprintX", 1) * SPRING_FOOTPRINT_SCALE));
+	zsize = std::max(1 * SPRING_FOOTPRINT_SCALE, (udTable.GetInt("footprintZ", 1) * SPRING_FOOTPRINT_SCALE));
 
 	if (IsImmobileUnit()) {
 		CreateYardMap(udTable.GetString("yardMap", ""));
@@ -783,21 +780,27 @@ void UnitDef::CreateYardMap(std::string yardMapStr)
 		// defined, assume it is not supposed to be a building
 		// (so do not assign a default per facing)
 		return;
+	} else {
+		yardmap.resize(xsize * zsize);
 	}
 
 	StringToLowerInPlace(yardMapStr);
 
-	// read the yardmap in half resolution from the LuaDef string
-	const unsigned int hxsize = xsize >> 1;
-	const unsigned int hzsize = zsize >> 1;
+	const bool highResMap = (yardMapStr[0] == 'h');
 
-	std::vector<YardMapStatus> yardMap(hxsize * hzsize, YARDMAP_BLOCKED);
-	std::string foundUnknownChars;
+	const unsigned int hxsize = xsize >> (1 - highResMap);
+	const unsigned int hzsize = zsize >> (1 - highResMap);
 
-	unsigned int idx = 0;
+	// if high-res yardmap, start at second character
+	unsigned int ymReadIdx = highResMap;
+	unsigned int ymCopyIdx = 0;
 
-	for (unsigned int n = 0; n < yardMapStr.size(); n++) {
-		const unsigned char c = yardMapStr[n];
+	std::vector<YardMapStatus> defYardMap(hxsize * hzsize, YARDMAP_BLOCKED);
+	std::string unknownChars;
+
+	// read the yardmap from the LuaDef string
+	while (ymReadIdx < yardMapStr.size()) {
+		const unsigned char c = yardMapStr[ymReadIdx++];
 
 		if (isspace(c))
 			continue;
@@ -815,33 +818,35 @@ void UnitDef::CreateYardMap(std::string yardMapStr)
 			case 'f':
 			case 'o': ys = YARDMAP_BLOCKED; break;
 			default:
-				if (foundUnknownChars.find_first_of(c) == std::string::npos)
-					foundUnknownChars += c;
+				if (unknownChars.find_first_of(c) == std::string::npos)
+					unknownChars += c;
 		}
 
-		if (idx < hxsize * hzsize) {
-			yardMap[idx] = ys;
-		}
-		idx++;
+		if (ymCopyIdx >= defYardMap.size())
+			continue;
+
+		defYardMap[ymCopyIdx++] = ys;
 	}
 
 	// print warnings
-	if (idx > yardMap.size())
-		LOG_L(L_WARNING, "%s: Given yardmap/blockmap contains "_STPF_" excess char(s)!", name.c_str(), idx - yardMap.size());
+	if (ymCopyIdx > defYardMap.size())
+		LOG_L(L_WARNING, "%s: Given yardmap contains "_STPF_" excess char(s)!", name.c_str(), ymCopyIdx - defYardMap.size());
 
-	if (idx > 0 && idx < yardMap.size())
-		LOG_L(L_WARNING, "%s: Given yardmap/blockmap requires "_STPF_" extra char(s)!", name.c_str(), yardMap.size() - idx);
+	if (ymCopyIdx > 0 && ymCopyIdx < defYardMap.size())
+		LOG_L(L_WARNING, "%s: Given yardmap requires "_STPF_" extra char(s)!", name.c_str(), defYardMap.size() - ymCopyIdx);
 
-	if (!foundUnknownChars.empty())
-		LOG_L(L_WARNING, "%s: Unknown char(s) in yardmap/blockmap \"%s\"!", name.c_str(), foundUnknownChars.c_str());
+	if (!unknownChars.empty())
+		LOG_L(L_WARNING, "%s: Given yardmap contains unknown char(s) \"%s\"!", name.c_str(), unknownChars.c_str());
 
-	// write in doubled resolution to final unitdef tag
-	yardmap.resize(xsize * zsize);
-	for (unsigned int z = 0; z < zsize; z++) {
-		for (unsigned int x = 0; x < xsize; x++) {
-			const unsigned int yardMapIdx = (x >> 1) + ((z >> 1) * hxsize);
-			const YardMapStatus yardMapChar = yardMap[yardMapIdx];
-			yardmap[x + z * xsize] = yardMapChar;
+	// write the final yardmap at blocking-map resolution
+	// (in case of a high-res map this becomes a 1:1 copy,
+	// otherwise the given yardmap will be upsampled)
+	for (unsigned int bmz = 0; bmz < zsize; bmz++) {
+		for (unsigned int bmx = 0; bmx < xsize; bmx++) {
+			const unsigned int yardMapIdx = (bmx >> (1 - highResMap)) + ((bmz >> (1 - highResMap)) * hxsize);
+			const YardMapStatus yardMapChar = defYardMap[yardMapIdx];
+
+			yardmap[bmx + bmz * xsize] = yardMapChar;
 		}
 	}
 }

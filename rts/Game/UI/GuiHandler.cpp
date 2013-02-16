@@ -107,7 +107,7 @@ CGuiHandler::CGuiHandler():
 		useStencil = (stencilBits >= 1);
 	}
 
-	failedSound = sound->GetSoundId("FailedCommand", false);
+	failedSound = sound->GetSoundId("FailedCommand");
 }
 
 
@@ -1028,6 +1028,10 @@ void CGuiHandler::SetCursorIcon() const
 				newCursor = "BuildGood";
 			}
 		}
+
+		if (!TryTarget(cmdDesc)) {
+			newCursor = "AttackBad";
+		}
 	}
 	else if (!useMinimap || minimap->FullProxy()) {
 		int defcmd;
@@ -1054,6 +1058,43 @@ void CGuiHandler::SetCursorIcon() const
 	}
 
 	mouse->ChangeCursor(newCursor, cursorScale);
+}
+
+
+bool CGuiHandler::TryTarget(const CommandDescription& cmdDesc) const
+{
+	if (cmdDesc.id != CMD_ATTACK)
+		return true;
+
+	if (selectedUnits.selectedUnits.empty())
+		return true;
+
+	// get mouse-hovered map pos
+	CUnit* unit = NULL;
+	CFeature* feature = NULL;
+	const float viewRange = globalRendering->viewRange * 1.4f;
+	const float dist = TraceRay::GuiTraceRay(camera->pos, mouse->dir, viewRange, NULL, unit, feature, true);
+	const float3 groundPos = camera->pos + mouse->dir * dist;
+
+	for (CUnitSet::const_iterator it = selectedUnits.selectedUnits.begin(); it != selectedUnits.selectedUnits.end(); ++it) {
+		const CUnit* u = *it;
+
+		if (u->weapons.empty())
+			continue;
+
+		if (!u->immobile)
+			return true;
+
+		if (dist <= 0.0f)
+			continue;
+
+		// TODO: why not test ALL weapons?
+		const CWeapon* w = u->weapons[0];
+		if (w->TryTarget(groundPos, false, unit))
+			return true;
+	}
+
+	return false;
 }
 
 
@@ -1541,7 +1582,8 @@ int CGuiHandler::GetDefaultCommand(int x, int y, const float3& cameraPos, const 
 		return -1;
 	}
 
-	int cmd_id;
+	int cmdID = -1;
+
 	{
 		GML_THRMUTEX_LOCK(unit, GML_DRAW); // GetDefaultCommand
 		GML_THRMUTEX_LOCK(feat, GML_DRAW); // GetDefaultCommand
@@ -1553,7 +1595,7 @@ int CGuiHandler::GetDefaultCommand(int x, int y, const float3& cameraPos, const 
 		}
 		else {
 			const float viewRange = globalRendering->viewRange * 1.4f;
-			const float dist = TraceRay::GuiTraceRay(cameraPos, mouseDir, viewRange, true, NULL, unit, feature);
+			const float dist = TraceRay::GuiTraceRay(cameraPos, mouseDir, viewRange, NULL, unit, feature, true);
 			const float3 hit = cameraPos + mouseDir * dist;
 
 			// make sure the ray hit in the map
@@ -1561,14 +1603,14 @@ int CGuiHandler::GetDefaultCommand(int x, int y, const float3& cameraPos, const 
 				return -1;
 		}
 
-		cmd_id = selectedUnits.GetDefaultCmd(unit, feature);
+		cmdID = selectedUnits.GetDefaultCmd(unit, feature);
 	}
 
 	GML_RECMUTEX_LOCK(gui); // GetDefaultCommand
 
 	// make sure the command is currently available
 	for (int c = 0; c < (int)commands.size(); c++) {
-		if (cmd_id == commands[c].id) {
+		if (cmdID == commands[c].id) {
 			return c;
 		}
 	}
@@ -2208,7 +2250,7 @@ Command CGuiHandler::GetCommand(int mouseX, int mouseY, int buttonHint, bool pre
 			CFeature* feature = NULL;
 			Command c(commands[tempInCommand].id, CreateOptions(button));
 
-			TraceRay::GuiTraceRay(cameraPos, mouseDir, globalRendering->viewRange * 1.4f, true, NULL, unit, feature);
+			TraceRay::GuiTraceRay(cameraPos, mouseDir, globalRendering->viewRange * 1.4f, NULL, unit, feature, true);
 			if (!unit) {
 				return defaultRet;
 			}
@@ -2217,12 +2259,11 @@ Command CGuiHandler::GetCommand(int mouseX, int mouseY, int buttonHint, bool pre
 		}
 
 		case CMDTYPE_ICON_UNIT_OR_MAP: {
-
 			Command c(commands[tempInCommand].id, CreateOptions(button));
 
 			CUnit* unit = NULL;
 			CFeature* feature = NULL;
-			const float dist2 = TraceRay::GuiTraceRay(cameraPos, mouseDir, globalRendering->viewRange * 1.4f, true, NULL, unit, feature);
+			const float dist2 = TraceRay::GuiTraceRay(cameraPos, mouseDir, globalRendering->viewRange * 1.4f, NULL, unit, feature, true);
 			if (dist2 > (globalRendering->viewRange * 1.4f - 300)) {
 				return defaultRet;
 			}
@@ -2288,7 +2329,7 @@ Command CGuiHandler::GetCommand(int mouseX, int mouseY, int buttonHint, bool pre
 			if (mouse->buttons[button].movement < 4) {
 				CUnit* unit = NULL;
 				CFeature* feature = NULL;
-				const float dist2 = TraceRay::GuiTraceRay(cameraPos, mouseDir, globalRendering->viewRange * 1.4f, true, NULL, unit, feature);
+				const float dist2 = TraceRay::GuiTraceRay(cameraPos, mouseDir, globalRendering->viewRange * 1.4f, NULL, unit, feature, true);
 
 				if (dist2 > (globalRendering->viewRange * 1.4f - 300) && (commands[tempInCommand].type != CMDTYPE_ICON_UNIT_FEATURE_OR_AREA)) {
 					return defaultRet;
@@ -2341,7 +2382,7 @@ Command CGuiHandler::GetCommand(int mouseX, int mouseY, int buttonHint, bool pre
 			if (mouse->buttons[button].movement < 16) {
 				CUnit* unit;
 				CFeature* feature;
-				const float dist2 = TraceRay::GuiTraceRay(cameraPos, mouseDir, globalRendering->viewRange * 1.4f, true, NULL, unit, feature);
+				const float dist2 = TraceRay::GuiTraceRay(cameraPos, mouseDir, globalRendering->viewRange * 1.4f, NULL, unit, feature, true);
 
 				if (dist2 > (globalRendering->viewRange * 1.4f - 300)) {
 					return defaultRet;
@@ -2435,7 +2476,7 @@ std::vector<BuildInfo> CGuiHandler::GetBuildPos(const BuildInfo& startInfo, cons
 
 		CUnit* unit;
 		CFeature* feature;
-		TraceRay::GuiTraceRay(cameraPos, mouseDir, globalRendering->viewRange*1.4f, true, NULL, unit, feature);
+		TraceRay::GuiTraceRay(cameraPos, mouseDir, globalRendering->viewRange * 1.4f, NULL, unit, feature, true, false, true);
 
 		if (unit) {
 			other.def = unit->unitDef;
@@ -3553,7 +3594,7 @@ void CGuiHandler::DrawMapStuff(bool onMinimap)
 			unit = minimap->GetSelectUnit(cameraPos);
 		} else {
 			// ignoring the returned distance
-			TraceRay::GuiTraceRay(cameraPos, mouseDir, globalRendering->viewRange*1.4f, false, NULL, unit, feature);
+			TraceRay::GuiTraceRay(cameraPos, mouseDir, globalRendering->viewRange * 1.4f, NULL, unit, feature, false);
 		}
 
 		if (unit && ((unit->losStatus[gu->myAllyTeam] & LOS_INLOS) || gu->spectatingFullView)) {
