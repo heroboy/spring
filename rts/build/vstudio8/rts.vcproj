@@ -1277,6 +1277,14 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\Game\TeamController.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\Game\TeamController.h"
+				>
+			</File>
+			<File
 				RelativePath="..\..\Game\TraceRay.cpp"
 				>
 			</File>
