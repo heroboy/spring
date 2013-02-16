@@ -130,10 +130,6 @@ bool CGame::ProcessKeyPressAction(unsigned int key, const Action& action) {
 		userWriting = false;
 		writingPos = 0;
 
-		if (key == SDLK_RETURN) {
-			// prevent game start when host enters a chat message
-			keyInput->SetKeyState(key, 0);
-		}
 		if (chatting) {
 			string command;
 
@@ -1140,7 +1136,7 @@ public:
 			"Starts/Ends alliance of the local players ally-team with another ally-team") {}
 
 	bool Execute(const UnsyncedAction& action) const {
-		if (!gu->spectating)
+		if (gu->spectating)
 			return false;
 
 		if (action.GetArgs().size() > 0) {
@@ -1240,10 +1236,6 @@ class ChatActionExecutor : public IUnsyncedActionExecutor {
 
 public:
 	bool Execute(const UnsyncedAction& action) const {
-		// if chat is bound to enter and we're waiting for user to press enter to start game, ignore.
-		if (action.GetKey() == SDLK_RETURN && !game->playing && keyInput->IsKeyPressed(SDLK_LCTRL))
-			return false;
-
 		if (setUserInputPrefix) {
 			game->userInputPrefix = userInputPrefix;
 		}
@@ -1252,8 +1244,8 @@ public:
 		game->userInput = game->userInputPrefix;
 		game->writingPos = (int)game->userInput.length();
 		game->chatting = true;
-
-		if (action.GetKey() != SDLK_RETURN) {
+		//this command can get called too from console or lua, if so GetKey is -1, don't drop next char then
+		if (action.GetKey() != SDLK_RETURN && action.GetKey() != -1 ) {
 			game->ignoreNextChar = true;
 		}
 
