@@ -246,15 +246,16 @@ CUnit::CUnit() : CSolidObject(),
 	lastDrawFrame(-30),
 	lastUnitUpdate(0),
 
-	stunned(false),
 #if STABLE_UPDATE
 	stableBeingBuilt(true),
 	stableIsDead(false),
 	stableTransporter(NULL),
 	stableStunned(false),
 	stableCommandQueEmpty(true),
-	stableLoadingTransportId(-1)
+	stableLoadingTransportId(-1),
 #endif
+
+	stunned(false)
 {
 	StableInit(modInfo.asyncPathFinder);
 	GML::GetTicks(lastUnitUpdate);

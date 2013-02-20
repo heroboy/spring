@@ -41,15 +41,16 @@ AMoveType::AMoveType(CUnit* owner):
 
 	progressState(Done),
 
-	maxSpeed(owner->unitDef->speed / GAME_SPEED),
-	maxSpeedDef(owner->unitDef->speed / GAME_SPEED),
-	maxWantedSpeed(owner->unitDef->speed / GAME_SPEED),
 #if STABLE_UPDATE
 	stableIsSkidding(false),
 	stableIsFlying(false),
 	stableGoalPos(owner? owner->pos: ZeroVector),
 	stableProgressState(Done),
 #endif
+
+	maxSpeed(owner->unitDef->speed / GAME_SPEED),
+	maxSpeedDef(owner->unitDef->speed / GAME_SPEED),
+	maxWantedSpeed(owner->unitDef->speed / GAME_SPEED),
 	repairBelowHealth(0.3f)
 {
 	StableInit(modInfo.asyncPathFinder);

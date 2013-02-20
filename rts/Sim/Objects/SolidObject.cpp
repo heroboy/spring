@@ -120,6 +120,7 @@ CSolidObject::CSolidObject():
 	midPos(pos),
 	mapPos(GetMapPos()),
 	blockMap(NULL),
+	buildFacing(0),
 #if STABLE_UPDATE
 	stableBlocking(false),
 	stablePos(pos),
@@ -139,9 +140,8 @@ CSolidObject::CSolidObject():
 	stableCrushResistance(0.0f),
 	stablePhysicalState(OnGround),
 	stableTeam(0),
-	stableBlockEnemyPushing(true),
+	stableBlockEnemyPushing(true)
 #endif
-	buildFacing(0)
 {
 	solidObjects.insert(this);
 }

@@ -118,7 +118,7 @@ public:
 	bool IsFailPath(unsigned int pathID);
 
 	struct PathOpData {
-		PathOpData() : type(PATH_NONE), moveDef(NULL), startPos(ZeroVector), goalPos(ZeroVector), minDistance(0.0f), owner(NULL), synced(false), pathID(-1), numRetries(0) OWNERID(-1) {}
+		PathOpData() : type(PATH_NONE), owner(NULL), pathID(-1), moveDef(NULL), startPos(ZeroVector), goalPos(ZeroVector), minDistance(0.0f), synced(false), numRetries(0) OWNERID(-1) {}
 		PathOpData(PathRequestType tp, const CSolidObject* own, unsigned int pID, const MoveDef* md, const float3& sp, const float3& gp, float gr, bool sync):
 		type(tp), owner(own), pathID(pID), moveDef(md), startPos(sp), goalPos(gp), goalRadius(gr), synced(sync), numRetries(0) OWNERID(own?own->id:-1) {}
 		PathOpData(PathRequestType tp, const CSolidObject* own, unsigned int pID):
@@ -126,23 +126,23 @@ public:
 		PathOpData(PathRequestType tp, unsigned int pID):
 		type(tp), owner(NULL), pathID(pID), moveDef(NULL), startPos(ZeroVector), goalPos(ZeroVector), minDistance(0.0f), synced(false), numRetries(0) OWNERID(-1) {}
 		PathOpData(PathRequestType tp, const CSolidObject* own, unsigned int pID, int nRet, const float3& callPos, float minDist, bool sync):
-		type(tp), owner(own), pathID(pID), numRetries(nRet), moveDef(NULL), startPos(callPos), goalPos(ZeroVector), minDistance(minDist), synced(sync) OWNERID(own?own->id:-1) {}
+		type(tp), owner(own), pathID(pID), moveDef(NULL), startPos(callPos), goalPos(ZeroVector), minDistance(minDist), synced(sync), numRetries(nRet) OWNERID(own?own->id:-1) {}
 		PathOpData(PathRequestType tp, unsigned int x1, unsigned int z1, unsigned int x2, unsigned int z2):
-		type(tp), moveDef(NULL), startPos(ZeroVector), goalPos(ZeroVector), cx1(x1), cx2(x2), synced(false), cz1(z1), cz2(z2) OWNERID(-1) {}
+		type(tp), cx1(x1), cz1(z1), moveDef(NULL), startPos(ZeroVector), goalPos(ZeroVector), cx2(x2), synced(false), cz2(z2) OWNERID(-1) {}
 
 		PathRequestType type;
+		union {
+			const CSolidObject* owner;
+			int cx1;
+		};
+		union {	int pathID, cz1; };
 		const MoveDef* moveDef;
 		float3 startPos, goalPos;
 		union {
 			float goalRadius, minDistance;
-			int cx1;
-		};
-		union {
-			const CSolidObject* owner;
 			int cx2;
 		};
 		bool synced;
-		union {	int pathID, cz1; };
 		union { int numRetries, cz2; };
 #if defined(USE_DESYNC_DETECTOR) && defined(MT_DESYNC_DETECTION)
 		int ownerid;
