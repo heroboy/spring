@@ -1037,11 +1037,12 @@ float3 CGroundMoveType::GetObstacleAvoidanceDir(const float3& desiredDir) {
 	const float avoidanceRadius = std::max(currentSpeed, 1.0f) * (avoider->radius * 2.0f);
 	const float avoiderRadius = FOOTPRINT_RADIUS(avoiderMD->xsize, avoiderMD->zsize, 1.0f);
 
-	std::vector<CSolidObject*> nearbyObjects = qf->StableGetSolidsExact(avoider->pos, avoidanceRadius);
+	const std::vector<CSolidObject*> objects = qf->StableGetSolidsExact(avoider->pos, avoidanceRadius);
 
-	for (std::vector<CSolidObject*>::const_iterator oi = nearbyObjects.begin(); oi != nearbyObjects.end(); ++oi) {
+	for (std::vector<CSolidObject*>::const_iterator oi = objects.begin(); oi != objects.end(); ++oi) {
 		const CSolidObject* avoidee = *oi;
 		const MoveDef* avoideeMD = avoidee->moveDef;
+		const UnitDef* avoideeUD = dynamic_cast<const UnitDef*>(avoidee->objectDef);
 
 		// cases in which there is no need to avoid this obstacle
 		if (avoidee == owner)
@@ -1054,8 +1055,8 @@ float3 CGroundMoveType::GetObstacleAvoidanceDir(const float3& desiredDir) {
 		if (!CMoveMath::CrushResistant(*avoiderMD, avoidee))
 			continue;
 
-		const bool avoideeMobile = (avoideeMD != NULL);
-		const bool avoidMobiles = avoiderMD->avoidMobilesOnPath;
+		const bool avoideeMobile  = (avoideeMD != NULL);
+		const bool avoideeMovable = (avoideeUD != NULL && !avoideeUD->pushResistant);
 
 		const float3 avoideeVector = (avoider->pos + avoider->speed) - (avoidee->StablePos() + avoidee->StableSpeed());
 
@@ -1072,9 +1073,11 @@ float3 CGroundMoveType::GetObstacleAvoidanceDir(const float3& desiredDir) {
 
 		// do not bother steering around idling MOBILE objects
 		// (since collision handling will just push them aside)
-		// TODO: also check if !avoideeUD->pushResistant
-		if (avoideeMobile && (!avoidMobiles || (!avoidee->StableIsMoving() && avoidee->StableAllyTeam() == avoider->allyteam)))
-			continue;
+		if (avoideeMobile && avoideeMovable) {
+			if (!avoiderMD->avoidMobilesOnPath || (!avoidee->StableIsMoving() && avoidee->StableAllyTeam() == avoider->allyteam)) {
+				continue;
+			}
+		}
 		// ignore objects that are more than this many degrees off-center from us
 		if (avoider->frontdir.dot(-(avoideeVector / avoideeDist)) < MAX_AVOIDEE_COSINE)
 			continue;
@@ -1667,14 +1670,6 @@ void CGroundMoveType::HandleUnitCollisions(
 		bool pushCollidee = collideeMobile;
 		bool crushCollidee = false;
 
-		// if not an allied collision, neither party is allowed to be pushed (bi-directional) and both stop
-		// if an allied collision, only the collidee is allowed to be crushed (uni-directional) and neither stop
-		//
-		// first rule can be ignored at will by either party (only through Lua) such that it is not stopped
-		// however neither party can override its pushResistant gene: the party that has it set will ignore
-		// pushing contributions from the other WITHOUT being forcibly stopped, unless *both* happen to be
-		// push-resistant (then both are stopped) --> technically correct but produces deadlocked units, so
-		// this is NOT enforced
 		const bool alliedCollision =
 			teamHandler->Ally(collider->allyteam, collidee->StableAllyTeam()) &&
 			teamHandler->Ally(collidee->StableAllyTeam(), collider->allyteam);
@@ -1683,8 +1678,8 @@ void CGroundMoveType::HandleUnitCollisions(
 
 		pushCollider &= (alliedCollision || modInfo.allowPushingEnemyUnits || !collider->blockEnemyPushing);
 		pushCollidee &= (alliedCollision || modInfo.allowPushingEnemyUnits || !collidee->StableBlockEnemyPushing());
-		pushCollider &= (!collider->beingBuilt && !collidee->StableUsingScriptMoveType());
-		pushCollidee &= (!collidee->StableBeingBuilt() && !collider->usingScriptMoveType);
+		pushCollider &= (!collider->beingBuilt && !collider->usingScriptMoveType && !colliderUD->pushResistant);
+		pushCollidee &= (!collidee->StableBeingBuilt() && !collidee->StableUsingScriptMoveType() && !collideeUD->pushResistant);
 
 		crushCollidee |= (!alliedCollision || modInfo.allowCrushingAlliedUnits);
 		crushCollidee &= ((colliderSpeed * collider->mass) > (collideeSpeed * collidee->StableMass()));
@@ -1770,31 +1765,24 @@ void CGroundMoveType::HandleUnitCollisions(
 		// squares (without resetting their position which stops them dead in
 		// their tracks and undoes previous legitimate pushes made this frame)
 		//
-		// ignore pushing contributions from idling friendly collidee's
-		// (or if we are resistant to them) without stopping; this will
-		// ONLY take effect if pushCollider is still true
-		//
-		// either both parties are pushed, or only one party is
-		// pushed and the other is stopped, or both are stopped
-		if (pushCollider) {
+		// if pushCollider and pushCollidee are both false (eg. if each party
+		// is pushResistant), treat the collision as regular and push both to
+		// avoid deadlocks
+		if (pushCollider || !pushCollidee) {
 			const bool colliderPushPosFree = !POS_IMPASSABLE(colliderMD, colliderPushPos, collider);
 			const bool colliderPushAllowed = (!colliderUD->pushResistant || collideeUD->pushResistant);
 
 			if (colliderPushPosFree && colliderPushAllowed) {
 				collider->Move3D(colliderPushPos, false);
 			}
-		} else {
-			collider->StoreImpulse((-collider->speed + (collider->moveType->oldPos - collider->pos).SafeNormalize()) * sepDirMask * collideeMassScale);
 		}
 
-		if (pushCollidee) {
+		if (pushCollidee || !pushCollider) {
 			const bool collideePushAllowed = (!collideeUD->pushResistant || colliderUD->pushResistant);
 
 			if (collideePushAllowed) {
 				collider->QueMoveUnit(collidee, -(colResponseVec * collideeMassScale), true, true); // performs impassable test
 			}
-		} else {
-			collider->QueAddImpulse(collidee, sepDirMask * colliderMassScale);
 		}
 
 		if (collider->isMoving && collidee->StableIsMoving()) {

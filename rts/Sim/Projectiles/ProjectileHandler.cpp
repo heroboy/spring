@@ -398,7 +398,8 @@ void CProjectileHandler::CheckUnitCollisions(
 		if (CCollisionHandler::DetectHit(unit, ppos0, ppos1, &cq)) {
 			// when the testpos is in the colvol DetectHit() sometimes
 			// returns the colvols center as colpos, so use ppos0 in that case
-			p->QueCollision(unit, cq.GetHitPiece(), cq.InsideHit()? ppos0 : cq.GetIngressPos(), ppos0);
+			p->QueCollision(unit, cq.GetHitPiece(), cq.InsideHit(), cq.GetHitPos(), ppos0);
+
 			break;
 		}
 	}
@@ -429,7 +430,8 @@ void CProjectileHandler::CheckFeatureCollisions(
 		if (CCollisionHandler::DetectHit(feature, ppos0, ppos1, &cq)) {
 			// when the testpos is in the colvol DetectHit() sometimes
 			// returns the colvols center as colpos, so use ppos0 in that case
-			p->QueCollision(feature, cq.InsideHit()? ppos0 : cq.GetIngressPos(), ppos0);
+			p->QueCollision(feature, cq.InsideHit(), cq.GetHitPos(), ppos0);
+
 			break;
 		}
 	}

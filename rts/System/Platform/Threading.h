@@ -12,6 +12,7 @@
 #ifdef __APPLE__
 	#include <libkern/OSAtomic.h> // OSAtomicIncrement64
 #endif
+
 #include "System/Platform/Win/win32.h"
 #include <boost/cstdint.hpp>
 #include "lib/gml/gml_base.h"
@@ -20,6 +21,8 @@
 
 #define DEBUG_MULTITHREADED_SIM (0 && GML_ENABLE_SIM) // enable debug output, requires GML
 #define DEBUG_THREADED_PATH (0 && GML_ENABLE_SIM) // enable debug output, requires GML
+
+class CGameController;
 
 namespace Threading {
 	/**
@@ -40,13 +43,13 @@ namespace Threading {
 	/**
 	 * Sets the affinity of the current thread
 	 *
-	 * Interpret <cores_bitmask> as a bit-mask indicating on which of the available system CPU's (which
-	 * are numbered logically from 1 to N) we want to run.
-	 * Note: that this approach will fail when N > 32.
+	 * Interpret <cores_bitmask> as a bit-mask indicating on which of the
+	 * available system CPU's (which are numbered logically from 1 to N) we
+	 * want to run. Note that this approach will fail when N > 32.
 	 */
 	void DetectCores();
 	boost::uint32_t SetAffinity(boost::uint32_t cores_bitmask, bool hard = true);
-	void SetAffinityHelper(const char *threadName, boost::uint32_t affinity);
+	void SetAffinityHelper(const char* threadName, boost::uint32_t affinity);
 	unsigned GetAvailableCores();
 	unsigned GetPhysicalCores();
 	unsigned GetDefaultAffinity(const char *threadName);
@@ -84,6 +87,7 @@ namespace Threading {
 	 */
 	void SetSimThread(bool set);
 	bool IsSimThread();
+	bool UpdateGameController(CGameController* ac);
 	void SetBatchThread(bool set);
 	bool IsBatchThread();
 

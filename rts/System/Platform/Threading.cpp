@@ -1,7 +1,9 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
 #include "lib/gml/gml_base.h"
+#include "lib/gml/gmlmut.h"
 #include "Threading.h"
+#include "Game/GameController.h"
 #include "System/bitops.h"
 #include "System/OpenMP_cond.h"
 #include "System/Config/ConfigHandler.h"
@@ -452,6 +454,15 @@ void ThreadNotUnitOwnerErrorFunc() { LOG_L(L_ERROR, "Illegal attempt to modify a
 	#else
 		return boost::this_thread::get_id() == simThreadID;
 	#endif
+	}
+
+	bool UpdateGameController(CGameController* ac) {
+		GML_MSTMUTEX_LOCK(sim); // UpdateGameController
+
+		SetSimThread(true);
+		bool ret = ac->Update();
+		SetSimThread(false);
+		return ret;
 	}
 
 	void SetBatchThread(bool set) {

@@ -172,27 +172,35 @@ int CProjectile::DrawArray()
 	return idx;
 }
 
-void CProjectile::QueCollision(CUnit* u, LocalModelPiece* lmp, const float3& cpos, const float3& cpos0, bool delay) {
+void CProjectile::QueCollision(CUnit* u, LocalModelPiece* lmp, bool inhit, const float3& cpos, const float3& cpos0, bool delay) {
 	if (delay) {
 //		ASSERT_THREAD_OWNS_PROJECTILE();
-		delayOps.push_back(DelayOp(UNIT_COLLISION, u, lmp, cpos, cpos0));
+		delayOps.push_back(DelayOp(UNIT_COLLISION, u, lmp, inhit, cpos, cpos0));
 	} else {
 		if (lmp != NULL)
 			u->SetLastAttackedPiece(lmp, gs->frameNum);
-		pos = cpos;
-		Collision(u);
-		pos = cpos0;
+		if (!inhit) {
+			pos = cpos;
+			Collision(u);
+			pos = cpos0;
+		} else {
+			Collision(u);
+		}
 	}
 }
 
-void CProjectile::QueCollision(CFeature* f, const float3& cpos, const float3& cpos0, bool delay) {
+void CProjectile::QueCollision(CFeature* f, bool inhit, const float3& cpos, const float3& cpos0, bool delay) {
 	if (delay) {
 //		ASSERT_THREAD_OWNS_PROJECTILE();
-		delayOps.push_back(DelayOp(FEAT_COLLISION, f, cpos, cpos0));
+		delayOps.push_back(DelayOp(FEAT_COLLISION, f, inhit, cpos, cpos0));
 	} else {
-		pos = cpos;
-		Collision(f);
-		pos = cpos0;
+		if (!inhit) {
+			pos = cpos;
+			Collision(f);
+			pos = cpos0;
+		} else {
+			Collision(f);
+		}
 	}
 }
 
@@ -211,10 +219,10 @@ void CProjectile::ExecuteDelayOps() {
 		const DelayOp d = delayOps.front(); // NOTE: No reference here since any of the calls below may add new delay ops at the end of the deque
 		switch (d.type) {
 			case UNIT_COLLISION:
-				QueCollision(d.unit, d.lmp, d.pos, d.pos0, false);
+				QueCollision(d.unit, d.lmp, d.inside, d.pos, d.pos0, false);
 				break;
 			case FEAT_COLLISION:
-				QueCollision(d.feat, d.pos, d.pos0, false);
+				QueCollision(d.feat, d.inside, d.pos, d.pos0, false);
 				break;
 			case GROUND_COLLISION:
 				QueCollision(d.pos.y, false);
