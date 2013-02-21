@@ -371,7 +371,7 @@ public:
 
 	virtual int2 GetNumQueuedUpdates(ST_FUNC int unused = 0) const { return (int2(0, 0)); }
 	int2 GetNumQueuedUpdates(MT_WRAP int unused = 0) const {
-		ScopedDisableThreading sdt;
+//		ScopedDisableThreading sdt;
 		return GetNumQueuedUpdates(ST_CALL unused);
 	}
 };
