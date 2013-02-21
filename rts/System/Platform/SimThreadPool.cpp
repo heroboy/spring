@@ -6,6 +6,8 @@
 #include "Sim/Misc/ModInfo.h"
 #include "lib/streflop/streflop_cond.h"
 
+CSimThreadPool* simThreadPool = NULL;
+
 CSimThreadPool::CSimThreadPool() :
 	stopThread(false),
 	atomicCount(-1),

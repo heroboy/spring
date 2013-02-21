@@ -23,4 +23,6 @@ private:
 	boost::thread* simThreads[GML_MAX_NUM_THREADS];
 };
 
+extern CSimThreadPool* simThreadPool;
+
 #endif // SIMTHREADPOOL_H

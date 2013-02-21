@@ -42,7 +42,6 @@ CONFIG(int, SimThreadCount).defaultValue(3).safemodeValue(3).minimumValue(3).max
 //////////////////////////////////////////////////////////////////////
 
 CUnitHandler* uh = NULL;
-CSimThreadPool* simThreadPool = NULL;
 static void UpdateMoveTypeThreadFuncStatic(bool threaded) { uh->UpdateMoveTypeThreadFunc(threaded); }
 static void SlowUpdateMoveTypeInitThreadFuncStatic(bool threaded) { uh->SlowUpdateMoveTypeInitThreadFunc(threaded); }
 static void SlowUpdateMoveTypeThreadFuncStatic(bool threaded) { uh->SlowUpdateMoveTypeThreadFunc(threaded); }

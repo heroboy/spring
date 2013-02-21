@@ -28,7 +28,6 @@
 #include "System/creg/STL_List.h"
 #include "lib/gml/gmlmut.h"
 
-extern CSimThreadPool* simThreadPool;
 static void ProjectileCollisionThreadFuncStatic(bool threaded) { ph->ProjectileCollisionThreadFunc(threaded); }
 
 // reserve 5% of maxNanoParticles for important stuff such as capture and reclaim other teams' units
