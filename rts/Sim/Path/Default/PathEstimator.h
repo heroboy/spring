@@ -96,7 +96,6 @@ public:
 	 */
 	void MapChanged(unsigned int x1, unsigned int z1, unsigned int x2, unsigned int z2);
 
-
 	/**
 	 * called every frame
 	 */
@@ -116,6 +115,9 @@ public:
 	PathNodeStateBuffer& GetNodeStateBuffer() { return blockStates; }
 
 	void MergePathCache();
+
+	void DoFindOffset(int n);
+	int NumBlocksToUpdate() const { return updateSingleBlocks.size(); }
 
 private:
 	void InitEstimator(const std::string& cacheFileName, const std::string& map);
@@ -146,6 +148,8 @@ private:
 		int2 blockPos;
 		const MoveDef* moveDef;
 	};
+
+	std::vector<SingleBlock> updateSingleBlocks;
 
 	const unsigned int BLOCK_SIZE;
 	const unsigned int BLOCK_PIXEL_SIZE;
