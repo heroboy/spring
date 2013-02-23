@@ -180,7 +180,7 @@ bool QTPFS::PathCache::MarkDeadPaths(const SRectangle& r) {
 	if (livePaths.empty())
 		return false;
 
-	assert(!Threading::threadedPath);
+//	assert(!Threading::threadedPath);
 
 	// NOTE: not static, we run in multiple threads
 	CollisionVolume rv;
