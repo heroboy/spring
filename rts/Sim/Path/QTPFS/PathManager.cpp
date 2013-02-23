@@ -856,7 +856,7 @@ void QTPFS::PathManager::QueueDeadPathSearches(unsigned int pathType) {
 		// for each of these now-dead paths, reset the active point-idx to 0
 		for (deadPathsIt = deadPaths.begin(); deadPathsIt != deadPaths.end(); ++deadPathsIt) {
 			if (!deadPathsIt->second->IsDeleted()) {
-				QueueSearch(deadPathsIt->second, NULL, moveDef, ZeroVector, ZeroVector, -1.0f, true);
+				QueueSearch(deadPathsIt->second, NULL, moveDef, ZeroVector, ZeroVector, -1.0f, true, Threading::threadedPath);
 			}
 		}
 
