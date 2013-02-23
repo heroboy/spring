@@ -35,7 +35,11 @@
 #include "System/creg/STL_List.h"
 #include "System/creg/STL_Set.h"
 
+#if defined(DEBUG) && defined(HEADLESS) // assume validation test
 CONFIG(int, SimThreadCount).defaultValue(3).safemodeValue(3).minimumValue(3).maximumValue(3);
+#else
+CONFIG(int, SimThreadCount).defaultValue(0).safemodeValue(1).minimumValue(0).maximumValue(GML_MAX_NUM_THREADS);
+#endif
 
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
@@ -247,11 +251,24 @@ void CUnitHandler::DeleteUnitNow(CUnit* delUnit)
 
 void CUnitHandler::Update()
 {
+	static int nBlockOps = 0;
 	{
 		GML_STDMUTEX_LOCK(runit); // Update
 
+		IPathManager::ScopedDisableThreading sdt;
+		{
+			SCOPED_TIMER("Unit::MoveType::Update");
+
+			for (int i = 0; i < nBlockOps; ++i) {
+				int id = blockOps[i];
+				(id > 0) ? units[id - 1]->Block() : units[-id - 1]->UnBlock();
+			}
+			if (modInfo.multiThreadSim)
+				pathManager->MergePathCaches();
+			CSolidObject::UpdateStableData();
+		}
+
 		if (!unitsToBeRemoved.empty()) {
-			IPathManager::ScopedDisableThreading sdt;
 			GML_RECMUTEX_LOCK(obj); // Update
 
 			while (!unitsToBeRemoved.empty()) {
@@ -302,34 +319,26 @@ void CUnitHandler::Update()
 
 	{
 		SCOPED_TIMER("Unit::MoveType::Update");
+
 		Threading::SetMultiThreadedSim(modInfo.multiThreadSim);
 		Threading::SetThreadedPath(modInfo.asyncPathFinder);
+		if (Threading::threadedPath)
+			pathManager->Update(1);
 		simThreadPool->Execute(&UpdateMoveTypeThreadFuncStatic);
 		Threading::SetMultiThreadedSim(false);
 
 		if (modInfo.asyncPathFinder) {
-			int nBlockOps = 0;
+			nBlockOps = 0;
 			// threaded pathing can run also during ExecuteDelayOps, since Block/UnBlock is further delayed
 			for (std::list<CUnit*>::iterator i = activeUnits.begin(); i != activeUnits.end(); ++i) {
 				CUnit* u = *i;
 				if (!u->delayOps.empty()) {
 					int block = u->ExecuteDelayOps(); // can generate new delay ops, but it will execute these also
 					if (block) {
-						CUnit::updateOps[u->id] = block;
-						blockOps[nBlockOps++] = u->id;
+						blockOps[nBlockOps++] = block ? u->id + 1 : -(u->id + 1);
 					}
 				}
 			}
-
-			IPathManager::ScopedDisableThreading sdt;
-
-			for (int i = 0; i < nBlockOps; ++i) {
-				int id = blockOps[i];
-				(CUnit::updateOps[id] > 0) ? units[id]->Block() : units[id]->UnBlock();
-			}
-			if (modInfo.multiThreadSim)
-				pathManager->MergePathCaches();
-			CSolidObject::UpdateStableData();
 		}
 	}
 

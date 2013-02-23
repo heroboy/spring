@@ -12,6 +12,7 @@
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/condition.hpp>
 #include "System/Sync/DesyncDetector.h"
+#include "System/TimeProfiler.h"
 
 #if defined(USE_DESYNC_DETECTOR) && defined(MT_DESYNC_DETECTION)
 #include "Sim/Objects/SolidObject.h"
@@ -64,6 +65,10 @@ public:
 
 	enum PathRequestType { PATH_NONE, REQUEST_PATH, NEXT_WAYPOINT, DELETE_PATH, UPDATE_PATH, TERRAIN_CHANGE, PATH_UPDATED };
 
+#if DEBUG_THREADED_PATH
+	struct ScopedDisableThreadingDummy {};
+	#define ScopedDisableThreading ScopedDisableThreadingReal
+#endif
 	struct ScopedDisableThreading {
 #if THREADED_PATH
 		bool oldThreading;
@@ -73,6 +78,10 @@ public:
 		ScopedDisableThreading(bool sync = true) {}
 #endif
 	};
+#if DEBUG_THREADED_PATH
+#undef ScopedDisableThreading
+#define ScopedDisableThreading ScopedDisableThreadingDummy sdtdummy ## __LINE__; char str ## __LINE__[40], sdtdata ## __LINE__[sizeof(ScopedTimer)]; sprintf(str ## __LINE__, "ScopedDisableThreading @ %d", __LINE__); new (sdtdata ## __LINE__) ScopedTimer(str ## __LINE__); IPathManager::ScopedDisableThreadingReal sdt ## __LINE__; ((ScopedTimer *)sdtdata ## __LINE__)->~ScopedTimer(); IPathManager::ScopedDisableThreadingDummy 
+#endif
 
 	/**
 	 * returns if a path was changed after RequestPath returned its pathID
@@ -84,10 +93,7 @@ public:
 	bool PathUpdated(MT_WRAP unsigned int pathID);
 
 	virtual void Update(ST_FUNC int unused = 0) {}
-	void Update(MT_WRAP int unused = 0) {
-		ScopedDisableThreading sdt;
-		Update(ST_CALL unused);
-	}
+	void Update(MT_WRAP int unused = 0);
 
 	struct PathData {
 		PathData() : pathID(-1), nextWayPoint(ZeroVector), updated(false), deleted(false) {}

@@ -447,6 +447,7 @@ void CPathEstimator::DoFindOffset(int n) {
 	blockStates.peNodeOffsets[blockN][currBlockMD->pathType] = FindOffset(*currBlockMD, blockX, blockZ);
 }
 
+#define THREADED_FIND_OFFSET 0
 CPathEstimator* curPE = NULL;
 
 void FindOffsetsStatic(bool threaded) {
@@ -501,10 +502,18 @@ void CPathEstimator::Update() {
 	// FindOffset (threadsafe)
 	{
 		SCOPED_TIMER("CPathEstimator::FindOffset");
+#if THREADED_FIND_OFFSET
 		Threading::SetMultiThreadedSim(modInfo.multiThreadSim);
 		curPE = this;
 		simThreadPool->Execute(&FindOffsetsStatic);
 		Threading::SetMultiThreadedSim(false);
+#else
+		Threading::OMPCheck();
+		#pragma omp parallel for
+		for (unsigned int n = 0; n < NumBlocksToUpdate(); ++n) {
+			DoFindOffset(n);
+		}
+#endif
 	}
 
 	// CalculateVertices (not threadsafe)

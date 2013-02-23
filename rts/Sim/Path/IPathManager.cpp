@@ -57,6 +57,17 @@ int IPathManager::GetPathID(int cid) {
 	if (waited) \
 		cond.notify_one();
 
+void IPathManager::Update(MT_WRAP int unused) {
+	if (unused) {
+		NOTIFY_PATH_THREAD(
+			pathOps.push_back(PathOpData());
+		)
+		return;
+	}
+	ScopedDisableThreading sdt;
+	Update(ST_CALL unused);
+}
+
 bool IPathManager::PathUpdated(MT_WRAP unsigned int pathID) {
 	if (!Threading::threadedPath) {
 		if (!modInfo.asyncPathFinder)
@@ -252,6 +263,9 @@ void IPathManager::AsynchronousThread() {
 						pathUpdates[cid.pathID].push_back(PathUpdateData(DELETE_PATH));
 					}
 					newPathCache.erase(cid.pathID);
+					break;
+				case PATH_NONE:
+					Update(ST_CALL 0);
 					break;
 				default:
 					LOG_L(L_ERROR,"Invalid path request %d", cid.type);

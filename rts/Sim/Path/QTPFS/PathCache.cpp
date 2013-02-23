@@ -95,16 +95,16 @@ void QTPFS::PathCache::AddLivePath(IPath* path) {
 	assert(path->GetID() != 0);
 	assert(path->NumPoints() >= 2);
 
-	assert(tempPaths.find(path->GetID()) != tempPaths.end());
+//	assert(tempPaths.find(path->GetID()) != tempPaths.end());
 	assert(livePaths.find(path->GetID()) == livePaths.end());
 	assert(deadPaths.find(path->GetID()) == deadPaths.end());
 	allPaths[path->GetID()] = path;
+	ErasePathIDs(newTempPaths, path->GetOwnerID(), path->GetID());
 
 	if (Threading::threadedPath)
 		return newLivePaths[path->GetOwnerID()].push_back(path);
 	// promote a path from temporary- to live-status (no deletion)
 	tempPaths.erase(path->GetID());
-	ErasePathIDs(newTempPaths, path->GetOwnerID(), path->GetID());
 	ErasePathIDs(newLivePaths, path->GetOwnerID(), path->GetID());
 	livePaths.insert(std::pair<unsigned int, IPath*>(path->GetID(), path));
 }

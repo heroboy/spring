@@ -715,7 +715,7 @@ void QTPFS::PathManager::ThreadUpdate() {
 		sharedPaths.clear();
 
 		for (unsigned int pathTypeUpdate = minPathTypeUpdate; pathTypeUpdate < maxPathTypeUpdate; pathTypeUpdate++) {
-			pathCaches[pathTypeUpdate].Merge();
+//			pathCaches[pathTypeUpdate].Merge();
 			#ifndef QTPFS_IGNORE_DEAD_PATHS
 			QueueDeadPathSearches(pathTypeUpdate);
 			#endif
@@ -773,10 +773,11 @@ bool QTPFS::PathManager::ExecuteSearch(
 	PathSearchListIt& searchesIt,
 	NodeLayer& nodeLayer,
 	PathCache& pathCache,
-	unsigned int pathType
+	unsigned int pathType,
+	IPath* tmpPath
 ) {
 	IPathSearch* search = *searchesIt;
-	IPath* path = pathCache.GetTempPath(search->GetID());
+	IPath* path = (tmpPath != NULL) ? tmpPath : pathCache.GetTempPath(search->GetID());
 
 	assert(search != NULL);
 	assert(path != NULL);
@@ -870,7 +871,8 @@ unsigned int QTPFS::PathManager::QueueSearch(
 	const float3& sourcePoint,
 	const float3& targetPoint,
 	const float radius,
-	const bool synced
+	const bool synced,
+	bool exec
 ) {
 	// TODO:
 	//     introduce synced and unsynced path-caches;
@@ -943,6 +945,9 @@ unsigned int QTPFS::PathManager::QueueSearch(
 	pathSearches[moveDef->pathType].push_back(newSearch);
 	pathCaches[moveDef->pathType].AddTempPath(newPath);
 
+	if (exec && ExecuteSearch(pathSearches[moveDef->pathType], --pathSearches[moveDef->pathType].end(), nodeLayers[moveDef->pathType], pathCaches[moveDef->pathType], moveDef->pathType, newPath))
+		searchStateOffset += NODE_STATE_OFFSET;
+
 	return (newPath->GetID());
 }
 
@@ -988,7 +993,7 @@ unsigned int QTPFS::PathManager::RequestPath(
 	bool synced)
 {
 	SCOPED_TIMER("PathManager::RequestPath");
-	return (QueueSearch(NULL, object, moveDef, sourcePoint, targetPoint, radius, synced));
+	return QueueSearch(NULL, object, moveDef, sourcePoint, targetPoint, radius, synced, Threading::threadedPath);;
 }
 
 

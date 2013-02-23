@@ -1515,10 +1515,11 @@ void CGame::SimFrame() {
 	SCOPED_TIMER("SimFrame");
 	helper->Update();
 	mapDamage->Update();
-	pathManager->Update();
+	if (!Threading::threadedPath)
+		pathManager->Update();
+	featureHandler->Update();
 	uh->Update();
 	ph->Update();
-	featureHandler->Update();
 	GCobEngine.Tick(33);
 	GUnitScriptEngine.Tick(33);
 	wind.Update();

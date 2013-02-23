@@ -127,7 +127,8 @@ namespace QTPFS {
 			const float3& sourcePoint,
 			const float3& targetPoint,
 			const float radius,
-			const bool synced
+			const bool synced,
+			bool exec = false
 		);
 
 		bool ExecuteSearch(
@@ -135,7 +136,8 @@ namespace QTPFS {
 			PathSearchListIt& searchesIt,
 			NodeLayer& nodeLayer,
 			PathCache& pathCache,
-			unsigned int pathType
+			unsigned int pathType,
+			IPath* tmpPath = NULL
 		);
 
 
