@@ -97,7 +97,7 @@ void QTPFS::PathCache::AddLivePath(IPath* path) {
 
 //	assert(tempPaths.find(path->GetID()) != tempPaths.end());
 	assert(livePaths.find(path->GetID()) == livePaths.end());
-	assert(deadPaths.find(path->GetID()) == deadPaths.end());
+//	assert(deadPaths.find(path->GetID()) == deadPaths.end());
 	allPaths[path->GetID()] = path;
 	ErasePathIDs(newTempPaths, path->GetOwnerID(), path->GetID());
 
