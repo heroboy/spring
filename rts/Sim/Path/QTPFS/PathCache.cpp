@@ -261,7 +261,7 @@ void QTPFS::PathCache::KillDeadPaths() {
 	for (PathMap::const_iterator deadPathsIt = deadPaths.begin(); deadPathsIt != deadPaths.end(); ++deadPathsIt) {
 		assert(!deadPathsIt->second->IsDeleted());
 		// NOTE: "!=" because re-requested dead paths go onto the temp-pile
-		assert(tempPaths.find(deadPathsIt->first) != tempPaths.end());
+//		assert(tempPaths.find(deadPathsIt->first) != tempPaths.end());
 		assert(livePaths.find(deadPathsIt->first) == livePaths.end());
 		assert(allPaths.find(deadPathsIt->second->GetID()) != allPaths.end() && allPaths.find(deadPathsIt->second->GetID())->second != deadPathsIt->second);
 		delete (deadPathsIt->second);
