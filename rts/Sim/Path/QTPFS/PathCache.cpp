@@ -256,7 +256,7 @@ bool QTPFS::PathCache::MarkDeadPaths(const SRectangle& r) {
 }
 
 void QTPFS::PathCache::KillDeadPaths() {
-	assert(!Threading::threadedPath);
+//	assert(!Threading::threadedPath);
 
 	for (PathMap::const_iterator deadPathsIt = deadPaths.begin(); deadPathsIt != deadPaths.end(); ++deadPathsIt) {
 		assert(!deadPathsIt->second->IsDeleted());
