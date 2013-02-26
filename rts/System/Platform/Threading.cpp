@@ -1,7 +1,5 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
-
-#include "lib/gml/gml_base.h"
-#include "lib/gml/gmlmut.h"
+#include "lib/gml/gml.h"
 #include "Threading.h"
 #include "Game/GameController.h"
 #include "System/bitops.h"
@@ -459,6 +457,7 @@ void ThreadNotUnitOwnerErrorFunc() { LOG_L(L_ERROR, "Illegal attempt to modify a
 	bool UpdateGameController(CGameController* ac) {
 #ifdef USE_GML
 #undef GML_MSTMUTEX_LOCK
+#undef sim
 #define GML_MSTMUTEX_LOCK(name, ...) gmlMutexLock name##mutexlock(name##mutex, __VA_ARGS__)
 #endif
 		GML_MSTMUTEX_LOCK(sim); // UpdateGameController
