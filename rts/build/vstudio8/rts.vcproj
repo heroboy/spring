@@ -5806,6 +5806,14 @@
 					>
 				</File>
 				<File
+					RelativePath="..\..\System\Platform\EngineTypeHandler.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\..\System\Platform\EngineTypeHandler.h"
+					>
+				</File>
+				<File
 					RelativePath="..\..\System\Platform\errorhandler.cpp"
 					>
 				</File>

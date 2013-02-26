@@ -197,7 +197,7 @@ MoveDef::MoveDef(const LuaTable& moveTable, int moveDefID) {
 	const LuaTable& speedModMultsTable = moveTable.SubTable("speedModMults");
 
 	const float minWaterDepth = moveTable.GetFloat("minWaterDepth", 10.0f);
-	const float maxWaterDepth = moveTable.GetFloat("maxWaterDepth", 0.0f);
+	const float maxWaterDepth = moveTable.GetFloat("maxWaterDepth",  0.0f);
 
 	if ((name.find("boat") != string::npos) ||
 	    (name.find("ship") != string::npos)) {
@@ -295,14 +295,14 @@ MoveDef::MoveDef(const LuaTable& moveTable, int moveDefID) {
 	assert((zsize & 1) == 1);
 }
 
-bool MoveDef::TestMoveSquare(const int hmx, const int hmz) const {
+bool MoveDef::TestMoveSquare(const int hmx, const int hmz, const CSolidObject* collider) const {
 	bool ret = true;
 
 	// test the entire footprint
-	for (int i = hmx - xsizeh; i <= hmx + xsizeh; i++) {
-		for (int j = hmz - zsizeh; j <= hmz + zsizeh; j++) {
+	for (int j = -zsizeh; j <= zsizeh; j++) {
+		for (int i = -xsizeh; i <= xsizeh; i++) {
 			const float speedMod = CMoveMath::GetPosSpeedMod(*this, hmx + i, hmz + j);
-			const CMoveMath::BlockType blockBits = CMoveMath::IsBlocked(*this, hmx + i, hmz + j, NULL);
+			const CMoveMath::BlockType blockBits = CMoveMath::IsBlocked(*this, hmx + i, hmz + j, collider);
 
 			// check both terrain and the blocking-map
 			ret &= ((speedMod > 0.0f) && ((blockBits & CMoveMath::BLOCK_STRUCTURE) == 0));
