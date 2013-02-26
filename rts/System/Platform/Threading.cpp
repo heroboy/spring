@@ -457,10 +457,12 @@ void ThreadNotUnitOwnerErrorFunc() { LOG_L(L_ERROR, "Illegal attempt to modify a
 	}
 
 	bool UpdateGameController(CGameController* ac) {
-//		GML_MSTMUTEX_LOCK(sim); // UpdateGameController
 #ifdef USE_GML
-		gmlMutexLock simmutexlock(simmutex);
+#undef GML_MSTMUTEX_LOCK
+#define GML_MSTMUTEX_LOCK(name, ...) gmlMutexLock name##mutexlock(name##mutex, __VA_ARGS__)
 #endif
+		GML_MSTMUTEX_LOCK(sim); // UpdateGameController
+
 		SetSimThread(true);
 		bool ret = ac->Update();
 		SetSimThread(false);
