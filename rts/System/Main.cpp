@@ -17,7 +17,7 @@
 #include "System/Platform/Threading.h"
 #include "System/Platform/Misc.h"
 #include "System/Log/ILog.h"
-
+#include "System/OpenMP_cond.h"
 
 #if !defined(__APPLE__) || !defined(HEADLESS)
 	// SDL_main.h contains a macro that replaces the main function on some OS, see SDL_main.h for details
@@ -130,6 +130,8 @@ static bool SetNvOptimusProfile(char* argv[])
  */
 int main(int argc, char* argv[])
 {
+			omp_set_dynamic(0);
+			omp_set_num_threads(1);
 // PROFILE builds exit on execv ...
 // HEADLESS run mostly in parallel for testing purposes, 100% omp threads wouldn't help then
 #if !defined(PROFILE) && !defined(HEADLESS)
