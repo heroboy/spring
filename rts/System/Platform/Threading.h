@@ -105,6 +105,8 @@ namespace Threading {
 	struct AtomicCounterInt64;
 };
 
+#include "lib/gml/gmlcnf.h"
+#include "System/OpenMP_cond.h"
 //
 // Inlined Definitions
 //
@@ -122,6 +124,12 @@ namespace Threading {
 //	#ifndef NDEBUG
 		if (!OMPInited)
 			OMPError();
+	#ifdef _OPENMP
+		if (GML::Enabled() && omp_get_max_threads() > 1) {
+			LOG_L(L_ERROR, "OMPTHREADS: %d", omp_get_max_threads());
+			OMPError();
+		}
+	#endif
 //	#endif
 	}
 

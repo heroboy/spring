@@ -224,24 +224,27 @@ namespace Threading {
 		}
 		OMPInited = true;
 	#ifdef _OPENMP
+		if (!useOMP) {
+			omp_set_dynamic(0);
+			omp_set_num_threads(1);
+			OMPCheck();
+			Threading::SetAffinityHelper("Main", configHandler->GetUnsigned("SetCoreAffinity"));
+			return;
+		}
 		boost::uint32_t systemCores   = Threading::GetAvailableCoresMask();
 		boost::uint32_t mainAffinity  = systemCores & configHandler->GetUnsigned("SetCoreAffinity");
 		boost::uint32_t ompAvailCores = systemCores & ~mainAffinity;
 
 		// For latency reasons our openmp threads yield rarely and so eat a lot cputime with idleing.
 		// So it's better we always leave 1 core free for our other threads, drivers & OS
-		if (!useOMP) {
-			omp_set_num_threads(1);
-			omp_set_dynamic(0);
-		}
-		else if (omp_get_max_threads() > 2)
+		if (omp_get_max_threads() > 2)
 			omp_set_num_threads(omp_get_max_threads() - 1); 
 
 		streflop_omp();
 
 		// omp threads
 		boost::uint32_t ompCores = 0;
-	Threading::OMPCheck();
+		OMPCheck();
 	#pragma omp parallel reduction(|:ompCores)
 		{
 			int i = omp_get_thread_num();
