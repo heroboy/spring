@@ -459,7 +459,7 @@ void ThreadNotUnitOwnerErrorFunc() { LOG_L(L_ERROR, "Illegal attempt to modify a
 #undef sim
 #undef GML_MSTMUTEX_LOCK
 #define GML_MSTMUTEX_LOCK(name, ...) gmlMutexLock name ## mutexlock(name ## mutex, __VA_ARGS__)
-		GML_MSTMUTEX_LOCK(sim); // UpdateGameController
+		GML_MSTMUTEX_LOCK(sim, 0); // UpdateGameController
 #endif
 
 		SetSimThread(true);
