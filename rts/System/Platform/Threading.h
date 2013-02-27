@@ -107,6 +107,7 @@ namespace Threading {
 
 #include "lib/gml/gmlcnf.h"
 #include "System/OpenMP_cond.h"
+#include "System/Log/ILog.h"
 //
 // Inlined Definitions
 //
