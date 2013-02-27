@@ -126,9 +126,14 @@ namespace Threading {
 		if (!OMPInited)
 			OMPError();
 	#ifdef _OPENMP
-		if (GML::Enabled() && omp_get_max_threads() > 1) {
-			LOG_L(L_ERROR, "OMPTHREADS: %d", omp_get_max_threads());
-			OMPError();
+
+		if (GML::Enabled() {
+			omp_set_dynamic(0);
+			omp_set_num_threads(1);
+			if (omp_get_max_threads() > 1) {
+				LOG_L(L_ERROR, "OMPTHREADS: %d", omp_get_max_threads());
+				OMPError();
+			}
 		}
 	#endif
 //	#endif
