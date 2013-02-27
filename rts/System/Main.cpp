@@ -130,8 +130,10 @@ static bool SetNvOptimusProfile(char* argv[])
  */
 int main(int argc, char* argv[])
 {
-			omp_set_dynamic(0);
-			omp_set_num_threads(1);
+#ifdef _OPENMP
+	omp_set_dynamic(0);
+	omp_set_num_threads(1);
+#endif
 // PROFILE builds exit on execv ...
 // HEADLESS run mostly in parallel for testing purposes, 100% omp threads wouldn't help then
 #if !defined(PROFILE) && !defined(HEADLESS)

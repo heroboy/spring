@@ -127,7 +127,7 @@ namespace Threading {
 			OMPError();
 	#ifdef _OPENMP
 
-		if (GML::Enabled() {
+		if (GML::Enabled()) {
 			omp_set_dynamic(0);
 			omp_set_num_threads(1);
 			if (omp_get_max_threads() > 1) {
