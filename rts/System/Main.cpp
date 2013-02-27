@@ -128,8 +128,21 @@ static bool SetNvOptimusProfile(char* argv[])
  *
  * Main entry point function
  */
+int ompdyn=0, ompthr=1, ompdyn2=0, ompthr2=1, ompcfg=0;
 int main(int argc, char* argv[])
 {
+	FILE *f = fopen("c:\\in.txt", "r");
+	fscanf(f, "%d %d %d %d %d", &ompdyn, &ompthr, &ompdyn2, &ompthr2, &ompcfg);
+	fclose(f);
+#ifdef _OPENMP
+	if(ompcfg&1024) {
+		LOG_L(L_ERROR, "OMP: Max thr %d", omp_get_max_threads());
+	}
+	if(ompcfg&1)
+		omp_set_dynamic(ompdyn);
+	if(ompcfg&2)
+		omp_set_num_threads(ompthr);
+#endif
 // PROFILE builds exit on execv ...
 // HEADLESS run mostly in parallel for testing purposes, 100% omp threads wouldn't help then
 #if !defined(PROFILE) && !defined(HEADLESS)

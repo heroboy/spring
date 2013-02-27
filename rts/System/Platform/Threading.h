@@ -108,6 +108,7 @@ namespace Threading {
 #include "lib/gml/gmlcnf.h"
 #include "System/OpenMP_cond.h"
 #include "System/Log/ILog.h"
+extern int ompdyn, ompthr, ompdyn2, ompthr2, ompcfg;
 //
 // Inlined Definitions
 //
@@ -128,12 +129,22 @@ namespace Threading {
 	#ifdef _OPENMP
 
 		if (GML::Enabled()) {
-			omp_set_dynamic(0);
-			omp_set_num_threads(1);
+			if (ompcfg&4)
+			omp_set_dynamic(ompdyn);
+			if (ompcfg&8)
+			omp_set_num_threads(ompthr);
 			if (omp_get_max_threads() > 1) {
 				LOG_L(L_ERROR, "OMPTHREADS: %d", omp_get_max_threads());
 				OMPError();
 			}
+		} else {
+			if (ompcfg&16)
+			omp_set_dynamic(ompdyn2);
+			if (ompcfg&32)
+			omp_set_num_threads(ompthr2);
+		}
+		if(ompcfg&4096) {
+			LOG_L(L_ERROR, "OMP: Max thrc %d", omp_get_max_threads());
 		}
 	#endif
 //	#endif

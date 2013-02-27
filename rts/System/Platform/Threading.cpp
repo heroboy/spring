@@ -216,7 +216,7 @@ namespace Threading {
 		::streflop_init_omp();
 	#endif
 	}
-
+extern int ompdyn, ompthr, ompdyn2, ompthr2, ompcfg;
 	void InitOMP(bool useOMP) {
 		if (OMPInited) {
 			LOG_L(L_ERROR, "InitOMP: OMP already initialized!");
@@ -225,8 +225,10 @@ namespace Threading {
 		OMPInited = true;
 	#ifdef _OPENMP
 		if (!useOMP) {
-			omp_set_dynamic(0);
-			omp_set_num_threads(1);
+			if(ompcfg&64)
+			omp_set_dynamic(ompdyn);
+			if(ompcfg&128)
+			omp_set_num_threads(ompthr);
 			OMPCheck();
 			Threading::SetAffinityHelper("Main", configHandler->GetUnsigned("SetCoreAffinity"));
 			return;
@@ -237,8 +239,15 @@ namespace Threading {
 
 		// For latency reasons our openmp threads yield rarely and so eat a lot cputime with idleing.
 		// So it's better we always leave 1 core free for our other threads, drivers & OS
+		if(ompcfg&256)
+			omp_set_dynamic(ompdyn2);
+		if(ompcfg&512)
+			omp_set_num_threads(ompthr2);
 		if (omp_get_max_threads() > 2)
 			omp_set_num_threads(omp_get_max_threads() - 1); 
+		if(ompcfg&2048) {
+			LOG_L(L_ERROR, "OMP: Max thri %d", omp_get_max_threads());
+		}
 
 		streflop_omp();
 
