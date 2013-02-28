@@ -9,6 +9,7 @@
 #include "System/Config/ConfigHandler.h"
 #include "System/Log/ILog.h"
 #include "System/Platform/CrashHandler.h"
+#include "System/Sync/FPUCheck.h"
 
 #include <boost/version.hpp>
 #include <boost/thread.hpp>
@@ -120,6 +121,8 @@ namespace Threading {
 	}
 
 	void SetAffinityHelper(const char *threadName, boost::uint32_t affinity) {
+		if (affinity == 0)
+			affinity = GetDefaultAffinity(threadName);
 		const boost::uint32_t cpuMask  = Threading::SetAffinity(affinity);
 		if (cpuMask == ~0) {
 			LOG("[Threading] %s thread CPU affinity not set", threadName);
@@ -135,7 +138,7 @@ namespace Threading {
 		}
 	}
 
-	int GetAvailableCores()
+	unsigned GetAvailableCores()
 	{
 		// auto-detect number of system threads
 	#if (BOOST_VERSION >= 103500)
@@ -311,6 +314,75 @@ namespace Threading {
 	#endif
 	}
 
+	unsigned GetPhysicalCores() {
+		unsigned regs[4];
+		memset(regs, 0, sizeof(regs));
+		regs[0] = 0;
+		proc::ExecCPUID(&regs[0], &regs[1], &regs[2], &regs[3]);
+		char vendor[12];
+		((unsigned *)vendor)[0] = regs[1];
+		((unsigned *)vendor)[1] = regs[3];
+		((unsigned *)vendor)[2] = regs[2];
+		std::string cpuVendor = std::string(vendor, 12);
+
+		unsigned threads = boost::thread::hardware_concurrency();
+		if (threads > 1 && cpuVendor == "GenuineIntel") {
+			memset(regs, 0, sizeof(regs));
+			regs[0] = 1;
+			proc::ExecCPUID(&regs[0], &regs[1], &regs[2], &regs[3]);
+			if ((regs[3] >> 28) & 1) {
+				// this is not entirely correct, HT can be disabled in BIOS or
+				// there could be more than 2 logical cores per physical core
+				return threads / 2;
+			}
+		}
+		return threads;
+	}
+
+	unsigned GetDefaultAffinity(const char *threadName) {
+		unsigned lcpu = GetAvailableCores();
+		unsigned pcpu = GetPhysicalCores();
+		unsigned cpuq = std::max((unsigned)1, (pcpu > 0) ? lcpu / pcpu : 1);
+		if (lcpu <= 1)
+			return 0;
+		unsigned allmask = 0;
+		for (int i = 0; i < lcpu; ++i)
+			allmask |= (1 << i);
+		unsigned main = 0;
+		bool simcore = (pcpu >= 2);
+		bool pathcore = (pcpu >= 6);
+		unsigned sim = simcore ? cpuq : 1;
+		unsigned path = pathcore ? (2 * cpuq) : sim;
+		unsigned mainmask = 1 << main;
+		unsigned simmask = 1 << sim;
+		unsigned pathmask = 1 << path;
+		if (main / cpuq != sim / cpuq) {
+			for (int i = 1; i < cpuq; ++i) {
+				mainmask |= (1 << (main + i));
+				simmask |= (1 << (sim + i));
+				pathmask |= (1 << (path + i));
+			}
+		}
+#ifdef HEADLESS
+		allmask &= GML::SimEnabled() ? ~(simmask | pathmask) : ~mainmask;
+#else
+		allmask &= GML::SimEnabled() ? ~(mainmask | simmask | pathmask) : ~mainmask;
+#endif
+
+		if (StringCaseCmp(threadName, "Main"))
+			return (1 << main);
+		else if (StringCaseCmp(threadName, "Sim"))
+			return (1 << sim);
+		else if (StringCaseCmp(threadName, "SimMT", 5))
+			return allmask;
+		else if (StringCaseCmp(threadName, "RenderMT", 8))
+			return allmask;
+		else if (StringCaseCmp(threadName, "Path"))
+			return pathcore ? (1 << path) : allmask;
+		else
+			LOG_L(L_ERROR, "GetDefaultAffinity: Unknown thread name %s", threadName);
+		return 0;
+	}
 
 	NativeThreadHandle GetCurrentThread()
 	{
