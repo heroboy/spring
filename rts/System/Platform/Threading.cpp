@@ -224,6 +224,8 @@ namespace Threading {
 		}
 		OMPInited = true;
 	#ifdef _OPENMP
+		#ifndef DEDICATED
+
 		if (!useOMP) {
 			if(ompcfg&64)
 			omp_set_dynamic(ompdyn);
@@ -270,7 +272,7 @@ namespace Threading {
 		boost::uint32_t nonOmpCores = ~ompCores;
 		if (mainAffinity == 0) mainAffinity = systemCores;
 		Threading::SetAffinityHelper("Main", mainAffinity & nonOmpCores);
-
+#endif
 	#else
 		Threading::SetAffinityHelper("Main", configHandler->GetUnsigned("SetCoreAffinity"));
 	#endif

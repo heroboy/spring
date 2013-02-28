@@ -17,7 +17,9 @@
 #include <boost/cstdint.hpp>
 
 class CGameController;
+#ifndef DEDICATED
 extern int ompdyn, ompthr, ompdyn2, ompthr2, ompcfg;
+#endif
 namespace Threading {
 	/**
 	 * Generic types & functions to handle OS native threads
@@ -126,6 +128,7 @@ namespace Threading {
 //	#ifndef NDEBUG
 		if (!OMPInited)
 			OMPError();
+#ifndef DEDICATED
 	#ifdef _OPENMP
 
 		if (GML::Enabled()) {
@@ -147,6 +150,7 @@ namespace Threading {
 			LOG_L(L_ERROR, "OMP: Max thrc %d", omp_get_max_threads());
 		}
 	#endif
+#endif
 //	#endif
 	}
 
