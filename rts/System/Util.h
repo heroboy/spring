@@ -7,7 +7,7 @@
 #include <sstream>
 #include <algorithm>
 #include <boost/utility.hpp>
-
+#include <climits> // for UINT_MAX
 #include "System/maindefines.h"
 
 
