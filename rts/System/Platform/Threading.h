@@ -17,7 +17,7 @@
 #include <boost/cstdint.hpp>
 
 class CGameController;
-
+extern int ompdyn, ompthr, ompdyn2, ompthr2, ompcfg;
 namespace Threading {
 	/**
 	 * Generic types & functions to handle OS native threads
@@ -108,7 +108,7 @@ namespace Threading {
 #include "lib/gml/gmlcnf.h"
 #include "System/OpenMP_cond.h"
 #include "System/Log/ILog.h"
-extern int ompdyn, ompthr, ompdyn2, ompthr2, ompcfg;
+
 //
 // Inlined Definitions
 //

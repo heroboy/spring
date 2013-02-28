@@ -216,7 +216,7 @@ namespace Threading {
 		::streflop_init_omp();
 	#endif
 	}
-extern int ompdyn, ompthr, ompdyn2, ompthr2, ompcfg;
+
 	void InitOMP(bool useOMP) {
 		if (OMPInited) {
 			LOG_L(L_ERROR, "InitOMP: OMP already initialized!");
