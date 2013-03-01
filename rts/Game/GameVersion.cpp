@@ -12,6 +12,7 @@
 #include <boost/config.hpp>
 #include <stdio.h>
 
+#define CUSTOM_ENGINE_TYPE
 /**
  * @brief Defines the current version string.
  * Take special care when moving this file.
