@@ -36,7 +36,7 @@ int GetMajorInt()
 
 const std::string& GetMinor()
 {
-	static const std::string minor = "0";
+	static const std::string minor = "1";
 	return minor;
 }
 
