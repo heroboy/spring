@@ -224,7 +224,6 @@ void CPreGame::UpdateClientNet()
 		return;
 	}
 
-	int engineType = -1;
 	boost::shared_ptr<const RawPacket> packet;
 	while ((packet = net->GetData(gs->frameNum)))
 	{
@@ -240,18 +239,11 @@ void CPreGame::UpdateClientNet()
 					std::string message;
 					pckt >> message;
 					LOG("%s", message.c_str());
-					if (engineType >= 0 && engineType != EngineTypeHandler::GetCurrentEngineType()) {
-						EngineTypeHandler::EngineTypeInfo* eti = EngineTypeHandler::GetEngineTypeInfo(engineType);
-						if (eti == NULL) {
-							LOG_L(L_ERROR, "Unknown engine type: %d", engineType);
-						} else {
-							SetExitCode(1);
-							gu->globalQuit = true;
-							net->Close(true);
-							LOG("Preparing to start %s", eti->exe.c_str());
-							EngineTypeHandler::SetRestartExecutable(eti->exe, message);
-							return;
-						}
+					if (EngineTypeHandler::WillRestartEngine(message)) {
+						SetExitCode(1);
+						gu->globalQuit = true;
+						net->Close(true);
+						return;
 					}
 					handleerror(NULL, "Remote requested quit: " + message, "Quit message", MBF_OK | MBF_EXCL);
 				} catch (const netcode::UnpackPacketException& ex) {
@@ -270,8 +262,7 @@ void CPreGame::UpdateClientNet()
 					pckt >> data;
 					switch (datatype) {
 						case CUSTOM_DATA_ENGINETYPE:
-							engineType = data;
-							LOG("Server requested engine type: %d", engineType);
+							EngineTypeHandler::SetRequestedEngineType(data & 0xFFFF, data >> 16);
 							break;
 						default:
 							LOG_L(L_ERROR, "Got invalid CustomData type: %d", (int)datatype);

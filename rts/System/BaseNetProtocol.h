@@ -107,7 +107,7 @@ enum NETMSG {
 
 /// Data types for NETMSG_CUSTOM_DATA
 enum CustomData {
-	CUSTOM_DATA_SPEEDCONTROL = 0,
+	//CUSTOM_DATA_SPEEDCONTROL = 0,
 	CUSTOM_DATA_LUADRAWTIME  = 1,
 	CUSTOM_DATA_ENGINETYPE  = 2
 };
@@ -165,9 +165,8 @@ public:
 	PacketType SendInternalSpeed(float internalSpeed);
 	PacketType SendCPUUsage(float cpuUsage);
 	PacketType SendCustomData(uchar myPlayerNum, uchar dataType, int dataValue);
-	PacketType SendSpeedControl(uchar myPlayerNum, int speedCtrl);
 	PacketType SendLuaDrawTime(uchar myPlayerNum, int mSec);
-	PacketType SendRequestEngineType(int type);
+	PacketType SendRequestEngineType(int type, int minor);
 	PacketType SendDirectControl(uchar myPlayerNum);
 	PacketType SendDirectControlUpdate(uchar myPlayerNum, uchar status, short heading, short pitch);
 	PacketType SendAttemptConnect(const std::string& name, const std::string& passwd, const std::string& version, int netloss, bool reconnect = false);
@@ -226,4 +225,3 @@ private:
 };
 
 #endif // _BASE_NET_PROTOCOL_H
-

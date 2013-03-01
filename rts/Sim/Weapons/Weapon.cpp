@@ -250,8 +250,10 @@ void CWeapon::UpdateRelWeaponPos()
 
 void CWeapon::Update()
 {
-	UpdateTargeting();
 	UpdateStockpile();
+	if (weaponDef->stockpile && numStockpiled <= 0 && salvoLeft <= 0) return;
+
+	UpdateTargeting();
 	UpdateFire();
 	UpdateSalvo();
 
@@ -315,7 +317,7 @@ void CWeapon::UpdateTargeting()
 			owner->rightdir * mainDir.x +
 			owner->updir    * mainDir.y;
 		const bool targetAngleConstraint = CheckTargetAngleConstraint(worldTargetDir, worldMainDir);
- 
+
 		if (angleGood && !targetAngleConstraint) {
  			// weapon finished a previously started AimWeapon thread and wants to
  			// fire, but target is no longer within contraints --> wait for re-aim

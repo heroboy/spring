@@ -1644,29 +1644,25 @@ public:
 class SpeedControlActionExecutor : public IUnsyncedActionExecutor {
 public:
 	SpeedControlActionExecutor() : IUnsyncedActionExecutor("SpeedControl",
-			"Set the speed-control mode to one of: 0=Default, 1=Average_CPU, 2=Maximum_CPU") {}
+			"Sets how server adjusts speed according to player's load (CPU), 0: use highest, 1: use average") {}
 
 	bool Execute(const UnsyncedAction& action) const {
-
+		if (!gameServer) {
+			return false;
+		}
 		if (action.GetArgs().empty()) {
 			// switch to next value
 			++game->speedControl;
-			if (game->speedControl > 2) {
-				game->speedControl = -2;
+			if (game->speedControl > 1) {
+				game->speedControl = 0;
 			}
 		} else {
 			// set value
 			game->speedControl = atoi(action.GetArgs().c_str());
 		}
 		// constrain to bounds
-		game->speedControl = std::max(-2, std::min(game->speedControl, 2));
-
-		net->Send(CBaseNetProtocol::Get().SendSpeedControl(gu->myPlayerNum, game->speedControl));
-		LOG("Speed Control: %s", CGameServer::SpeedControlToString(game->speedControl).c_str());
-		configHandler->Set("SpeedControl", game->speedControl);
-		if (gameServer) {
-			gameServer->UpdateSpeedControl(game->speedControl);
-		}
+		game->speedControl = std::max(0, std::min(game->speedControl, 1));
+		gameServer->UpdateSpeedControl(game->speedControl);
 		return true;
 	}
 };
@@ -2855,6 +2851,7 @@ public:
 	}
 };
 
+
 class DebugPathDrawerActionExecutor : public IUnsyncedActionExecutor {
 public:
 	DebugPathDrawerActionExecutor(): IUnsyncedActionExecutor("DebugPath", "Enable/Disable drawing of pathfinder debug-data") {
@@ -2862,6 +2859,19 @@ public:
 
 	bool Execute(const UnsyncedAction& action) const {
 		LogSystemStatus("path-debug rendering mode", pathDrawer->ToggleEnabled());
+		return true;
+	}
+};
+
+
+class DebugTraceRayDrawerActionExecutor : public IUnsyncedActionExecutor {
+public:
+	DebugTraceRayDrawerActionExecutor(): IUnsyncedActionExecutor("DebugTraceRay", "Enable/Disable drawing of traceray debug-data") {
+	}
+
+	bool Execute(const UnsyncedAction& action) const {
+		globalRendering->drawdebugtraceray = !globalRendering->drawdebugtraceray;
+		LogSystemStatus("traceray debug rendering mode", globalRendering->drawdebugtraceray);
 		return true;
 	}
 };
@@ -3360,6 +3370,7 @@ void UnsyncedGameCommands::AddDefaultActionExecutors() {
 	AddActionExecutor(new DebugActionExecutor());
 	AddActionExecutor(new DebugColVolDrawerActionExecutor());
 	AddActionExecutor(new DebugPathDrawerActionExecutor());
+	AddActionExecutor(new DebugTraceRayDrawerActionExecutor());
 	AddActionExecutor(new NoSoundActionExecutor());
 	AddActionExecutor(new SoundChannelEnableActionExecutor());
 	AddActionExecutor(new CreateVideoActionExecutor());

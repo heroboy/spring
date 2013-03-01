@@ -167,16 +167,12 @@ PacketType CBaseNetProtocol::SendCustomData(uchar myPlayerNum, uchar dataType, i
 	return PacketType(packet);
 }
 
-PacketType CBaseNetProtocol::SendSpeedControl(uchar myPlayerNum, int speedCtrl) {
-	return SendCustomData(myPlayerNum, CUSTOM_DATA_SPEEDCONTROL, speedCtrl);
-}
-
 PacketType CBaseNetProtocol::SendLuaDrawTime(uchar myPlayerNum, int mSec) {
 	return SendCustomData(myPlayerNum, CUSTOM_DATA_LUADRAWTIME, mSec);
 }
 
-PacketType CBaseNetProtocol::SendRequestEngineType(int type) {
-	return SendCustomData(0, CUSTOM_DATA_ENGINETYPE, type);
+PacketType CBaseNetProtocol::SendRequestEngineType(int type, int minor) {
+	return SendCustomData(0, CUSTOM_DATA_ENGINETYPE, type | (minor << 16));
 }
 
 PacketType CBaseNetProtocol::SendDirectControl(uchar myPlayerNum)
@@ -525,4 +521,3 @@ CBaseNetProtocol::~CBaseNetProtocol()
 {
 	//SendQuit();
 }
-

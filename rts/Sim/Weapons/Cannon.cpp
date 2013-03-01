@@ -63,7 +63,8 @@ void CCannon::UpdateRange(float val)
 {
 	range = val;
 	// initialize range factor
-	rangeFactor = (float)range/GetRange2D(0);
+	rangeFactor = 1.f;
+	rangeFactor = range / GetRange2D(0);
 	// do not extend range if the modder specified speed too low
 	// for the projectile to reach specified range
 	if (rangeFactor > 1.f || rangeFactor <= 0.f)
@@ -75,10 +76,6 @@ void CCannon::UpdateRange(float val)
 		heightBoostFactor = (2.f - rangeFactor) / math::sqrt(rangeFactor);
 }
 
-CCannon::~CCannon()
-{
-
-}
 
 void CCannon::Update()
 {
@@ -149,7 +146,7 @@ void CCannon::FireImpl()
 {
 	float3 diff = targetPos - weaponMuzzlePos;
 	float3 dir = (diff.SqLength() > 4.0) ? GetWantedDir(diff) : diff; // prevent vertical aim when emit-sfx firing the weapon
-	dir += 
+	dir +=
 		(gs->randVector() * sprayAngle + salvoError) *
 		(1.0f - owner->limExperience * weaponDef->ownerExpAccWeight);
 	dir.SafeNormalize();

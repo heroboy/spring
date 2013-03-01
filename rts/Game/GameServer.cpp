@@ -74,7 +74,7 @@
 
 using netcode::RawPacket;
 
-CONFIG(int, SpeedControl).defaultValue(0);
+CONFIG(int, SpeedControl).defaultValue(1).description("Sets how server adjusts speed according to player's load (CPU), 0: use highest, 1: use average");
 CONFIG(bool, BypassScriptPasswordCheck).defaultValue(false);
 CONFIG(bool, WhiteListAdditionalPlayers).defaultValue(true);
 CONFIG(std::string, AutohostIP).defaultValue("127.0.0.1");
@@ -158,9 +158,7 @@ CGameServer::CGameServer(const std::string& hostIP, int hostPort, const GameData
 
 	medianCpu = 0.0f;
 	medianPing = 0;
-	curSpeedCtrl = 0;
-	speedControl = configHandler->GetInt("SpeedControl");
-	UpdateSpeedControl(--speedControl + 1);
+	curSpeedCtrl = configHandler->GetInt("SpeedControl");
 
 	bypassScriptPasswordCheck = configHandler->GetBool("BypassScriptPasswordCheck");
 	whiteListAdditionalPlayers = configHandler->GetBool("WhiteListAdditionalPlayers");
@@ -861,7 +859,7 @@ void CGameServer::LagProtection()
 	// calculate median values
 	medianCpu = 0.0f;
 	medianPing = 0;
-	if (curSpeedCtrl > 0 && !cpu.empty()) {
+	if (curSpeedCtrl == 1 && !cpu.empty()) {
 		std::sort(cpu.begin(), cpu.end());
 		std::sort(ping.begin(), ping.end());
 
@@ -878,14 +876,14 @@ void CGameServer::LagProtection()
 	// adjust game speed
 	if (refCpuUsage > 0.0f && !isPaused) {
 		// aim for 60% cpu usage if median is used as reference and 75% cpu usage if max is the reference
-		float wantedCpuUsage = (curSpeedCtrl > 0) ?  0.60f : 0.75f;
+		float wantedCpuUsage = (curSpeedCtrl == 1) ?  0.60f : 0.75f;
 		wantedCpuUsage += (1.0f - internalSpeed / userSpeedFactor) * 0.5f; //???
 
 		float newSpeed = internalSpeed * wantedCpuUsage / refCpuUsage;
 		newSpeed = (newSpeed + internalSpeed) * 0.5f;
 		newSpeed = Clamp(newSpeed, 0.1f, userSpeedFactor);
 		if (userSpeedFactor <= 2.f)
-			newSpeed = std::max(newSpeed, (curSpeedCtrl > 0) ? userSpeedFactor * 0.8f : userSpeedFactor * 0.5f);
+			newSpeed = std::max(newSpeed, (curSpeedCtrl == 1) ? userSpeedFactor * 0.8f : userSpeedFactor * 0.5f);
 
 #if !defined(DEDICATED) && !defined(USE_GML)
 		// adjust game speed to localclient's (:= host) maximum SimFrame rate
@@ -971,8 +969,8 @@ void CGameServer::ProcessPacket(const unsigned playerNum, boost::shared_ptr<cons
 				if (!players[a].isLocal && players[a].spectator && !demoReader) {
 					PrivateMessage(a, "Spectators cannot pause the game");
 				}
-				else if (curSpeedCtrl > 0 && !isPaused && !players[a].isLocal &&
-					(players[a].spectator || (curSpeedCtrl > 0 &&
+				else if (curSpeedCtrl == 1 && !isPaused && !players[a].isLocal &&
+					(players[a].spectator || (curSpeedCtrl == 1 &&
 					(players[a].cpuUsage - medianCpu > std::min(0.2f, std::max(0.0f, 0.8f - medianCpu)) ||
 					(serverFrameNum - players[a].lastFrameResponse) - medianPing > internalSpeed * GAME_SPEED / 2)))) {
 						PrivateMessage(a, "Pausing rejected (cpu load or ping is too high)");
@@ -1011,10 +1009,6 @@ void CGameServer::ProcessPacket(const unsigned playerNum, boost::shared_ptr<cons
 			}
 			const enum CustomData dataType = (enum CustomData)inbuf[2];
 			switch (dataType) {
-				case CUSTOM_DATA_SPEEDCONTROL:
-					players[a].speedControl = *((int*)&inbuf[3]);
-					UpdateSpeedControl(speedControl);
-					break;
 				case CUSTOM_DATA_LUADRAWTIME:
 					players[a].luaLockTime = *((int*)&inbuf[3]);
 					break;
@@ -1028,7 +1022,6 @@ void CGameServer::ProcessPacket(const unsigned playerNum, boost::shared_ptr<cons
 			Message(str(format(PlayerLeft) %players[a].GetType() %players[a].name %" normal quit"));
 			Broadcast(CBaseNetProtocol::Get().SendPlayerLeft(a, 1));
 			players[a].Kill("User exited");
-			UpdateSpeedControl(speedControl);
 			if (hostif)
 				hostif->SendPlayerLeft(a, 1);
 			break;
@@ -1743,12 +1736,13 @@ void CGameServer::ServerReadNet()
 				msg >> netloss;
 				boost::shared_ptr<netcode::CConnection> newconn = UDPNet->AcceptConnection();
 				unsigned int curenginetype = EngineTypeHandler::GetCurrentEngineType();
-				if (enginetype != curenginetype || engineversionmajor != SpringVersion::GetMajorInt() || engineversionminor != SpringVersion::GetMinorInt()) {
+				unsigned int curengineminor = SpringVersion::GetMinorInt();
+				if (enginetype != curenginetype || engineversionmajor != SpringVersion::GetMajorInt() || engineversionminor != curengineminor) {
 					std::string enginereq = EngineTypeHandler::GetEngine(curenginetype, SpringVersion::GetMajorInt(), SpringVersion::GetMinorInt(), SpringVersion::GetPatchSetInt());
 					std::string enginereqshort = EngineTypeHandler::GetEngine(curenginetype, SpringVersion::GetMajorInt(), SpringVersion::GetMinorInt(), SpringVersion::GetPatchSetInt(), true);
 					std::string engineinst = EngineTypeHandler::GetEngine(enginetype, engineversionmajor, engineversionminor, enginepatchset);
 					newconn->Unmute();
-					newconn->SendData(CBaseNetProtocol::Get().SendRequestEngineType(curenginetype));
+					newconn->SendData(CBaseNetProtocol::Get().SendRequestEngineType(curenginetype, curengineminor));
 					newconn->SendData(CBaseNetProtocol::Get().SendQuit("Wrong engine type or version!\n\nThis server requires engine: " + enginereq + "\n\nCurrently installed engine: " + engineinst));
 					newconn->Flush(true);
 					newconn->Close();
@@ -1791,7 +1785,6 @@ void CGameServer::ServerReadNet()
 			Message(str(format(PlayerLeft) %player.GetType() %player.name %" timeout")); //this must happen BEFORE the reset!
 			Broadcast(CBaseNetProtocol::Get().SendPlayerLeft(a, 0));
 			player.Kill("User timeout");
-			UpdateSpeedControl(speedControl);
 			if (hostif)
 				hostif->SendPlayerLeft(a, 0);
 			continue;
@@ -2335,37 +2328,9 @@ void CGameServer::CreateNewFrame(bool fromServerThread, bool fixedFrameTime)
 }
 
 void CGameServer::UpdateSpeedControl(int speedCtrl) {
-	if (speedControl != speedCtrl) {
-		speedControl = speedCtrl;
-		curSpeedCtrl = (speedControl == 1 || speedControl == -1) ? 1 : 0;
-	}
-	if (speedControl >= 0) {
-		int oldSpeedCtrl = curSpeedCtrl;
-		int avgVotes = 0;
-		int maxVotes = 0;
-		for (size_t i = 0; i < players.size(); ++i) {
-			if (players[i].link) {
-				int sc = players[i].speedControl;
-				if (sc == 1 || sc == -1)
-					++avgVotes;
-				else if (sc == 2 || sc == -2)
-					++maxVotes;
-			}
-		}
-
-		if (avgVotes > maxVotes)
-			curSpeedCtrl = 1;
-		else if (avgVotes < maxVotes)
-			curSpeedCtrl = 0;
-		else
-			curSpeedCtrl = (speedControl == 1) ? 1 : 0;
-
-		if (curSpeedCtrl != oldSpeedCtrl) {
-			Message(str(format("Server speed control: %s CPU [%d/%d]")
-					%(curSpeedCtrl ? "Average" : "Maximum")
-					%(curSpeedCtrl ? avgVotes : maxVotes)
-					%(avgVotes + maxVotes)));
-		}
+	if (speedCtrl != curSpeedCtrl) {
+		Message(str(format("Server speed control: %s")
+			%(SpeedControlToString(speedCtrl).c_str())));
 	}
 }
 
@@ -2373,19 +2338,12 @@ std::string CGameServer::SpeedControlToString(int speedCtrl) {
 
 	std::string desc;
 	if (speedCtrl == 0) {
-		desc = "Default";
-	} else if ((speedCtrl == 1) || (speedCtrl == -1)) {
-		desc = "Average CPU";
-	} else if ((speedCtrl == 2) || (speedCtrl == -2)) {
 		desc = "Maximum CPU";
+	} else if (speedCtrl == 1) {
+		desc = "Average CPU";
 	} else {
 		desc = "<invalid>";
 	}
-
-	if (speedCtrl < 0) {
-		desc += " (server voting disabled)";
-	}
-
 	return desc;
 }
 
@@ -2434,7 +2392,6 @@ void CGameServer::KickPlayer(const int playerNum)
 	Message(str(format(PlayerLeft) %players[playerNum].GetType() %players[playerNum].name %"kicked"));
 	Broadcast(CBaseNetProtocol::Get().SendPlayerLeft(playerNum, 2));
 	players[playerNum].Kill("Kicked from the battle", true);
-	UpdateSpeedControl(speedControl);
 	if (hostif)
 		hostif->SendPlayerLeft(playerNum, 2);
 }
@@ -2596,7 +2553,6 @@ unsigned CGameServer::BindConnection(std::string name, const std::string& passwd
 		Broadcast(CBaseNetProtocol::Get().SendPlayerLeft(newPlayerNumber, 0));
 		newPlayer.link.reset(); // prevent sending a quit message since this might kill the new connection
 		newPlayer.Kill("Terminating connection");
-		UpdateSpeedControl(speedControl);
 		if (hostif)
 			hostif->SendPlayerLeft(newPlayerNumber, 0);
 	}
@@ -2666,10 +2622,10 @@ void CGameServer::InternalSpeedChange(float newSpeed)
 
 void CGameServer::UserSpeedChange(float newSpeed, int player)
 {
-	if (curSpeedCtrl > 0 &&
+	if (curSpeedCtrl == 1 &&
 		player >= 0 && static_cast<unsigned int>(player) != SERVER_PLAYER &&
 		!players[player].isLocal && !isPaused &&
-		(players[player].spectator || (curSpeedCtrl > 0 &&
+		(players[player].spectator || (curSpeedCtrl == 1 &&
 		(players[player].cpuUsage - medianCpu > std::min(0.2f, std::max(0.0f, 0.8f - medianCpu)) ||
 		(serverFrameNum - players[player].lastFrameResponse) - medianPing > internalSpeed * GAME_SPEED / 2)))) {
 		PrivateMessage(player, "Speed change rejected (cpu load or ping is too high)");
