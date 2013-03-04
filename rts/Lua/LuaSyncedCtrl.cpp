@@ -42,6 +42,7 @@
 #include "Sim/Projectiles/Projectile.h"
 #include "Sim/Projectiles/PieceProjectile.h"
 #include "Sim/Projectiles/WeaponProjectiles/WeaponProjectile.h"
+#include "Sim/Projectiles/WeaponProjectiles/WeaponProjectileFactory.h"
 #include "Sim/Projectiles/ProjectileHandler.h"
 #include "Sim/Units/Unit.h"
 #include "Sim/Units/UnitDef.h"
@@ -61,6 +62,7 @@
 #include "Sim/Weapons/Weapon.h"
 #include "Sim/Weapons/WeaponDefHandler.h"
 #include "System/myMath.h"
+#include "System/ObjectDependenceTypes.h"
 #include "System/Log/ILog.h"
 #include "System/Sync/HsiehHash.h"
 #include "LuaHelper.h"
@@ -202,6 +204,7 @@ bool LuaSyncedCtrl::PushEntries(lua_State* L)
 	REGISTER_LUA_CFUNC(SetProjectilePosition);
 	REGISTER_LUA_CFUNC(SetProjectileVelocity);
 	REGISTER_LUA_CFUNC(SetProjectileCollision);
+	REGISTER_LUA_CFUNC(SetProjectileTarget);
 
 	REGISTER_LUA_CFUNC(SetProjectileGravity);
 	REGISTER_LUA_CFUNC(SetProjectileSpinAngle);
@@ -241,6 +244,7 @@ bool LuaSyncedCtrl::PushEntries(lua_State* L)
 	REGISTER_LUA_CFUNC(SetMapSquareTerrainType);
 	REGISTER_LUA_CFUNC(SetTerrainTypeData);
 
+	REGISTER_LUA_CFUNC(SpawnProjectile);
 	REGISTER_LUA_CFUNC(SpawnCEG);
 
 	REGISTER_LUA_CFUNC(EditUnitCmdDesc);
@@ -336,6 +340,60 @@ static inline CProjectile* ParseProjectile(lua_State* L,
 	return pmp->first;
 }
 
+static bool ParseProjectileParams(lua_State* L, ProjectileParams& params, const int tblIdx, const char* caller)
+{
+	if (!lua_istable(L, tblIdx)) {
+		luaL_error(L, "[%s] argument %i must be a table!", caller, tblIdx);
+		return false;
+	}
+
+	for (lua_pushnil(L); lua_next(L, tblIdx) != 0; lua_pop(L, 1)) {
+		if (lua_israwstring(L, -2)) {
+			const std::string& key = lua_tostring(L, -2);
+
+			if (lua_istable(L, -1)) {
+				float array[3] = {0.0f, 0.0f, 0.0f};
+				const int size = LuaUtils::ParseFloatArray(L, -1, array, 3);
+
+				if (size == 3) {
+				    if (key == "pos") {
+						params.pos = array;
+					} else if (key == "end") {
+						params.end = array;
+					} else if (key == "speed") {
+						params.speed = array;
+					} else if (key == "spread") {
+						params.spread = array;
+					} else if (key == "error") {
+						params.error = array;
+					}
+				}
+
+				continue;
+			}
+
+			if (lua_isnumber(L, -1)) {
+				if (key == "ttl") {
+					params.ttl = lua_tofloat(L, -1);
+				} else if (key == "gravity") {
+					params.gravity = lua_tofloat(L, -1);
+				} else if (key == "tracking") {
+					params.tracking = lua_tofloat(L, -1);
+				} else if (key == "maxRange") {
+					params.maxRange = lua_tofloat(L, -1);
+				} else if (key == "startAlpha") {
+					params.startAlpha = lua_tofloat(L, -1);
+				} else if (key == "endAlpha") {
+					params.endAlpha = lua_tofloat(L, -1);
+				}
+
+				continue;
+			}
+		}
+	}
+
+	return true;
+}
 
 static CTeam* ParseTeam(lua_State* L, const char* caller, int index)
 {
@@ -2606,13 +2664,11 @@ int LuaSyncedCtrl::SetFeatureCollisionVolumeData(lua_State* L)
 int LuaSyncedCtrl::SetProjectileMoveControl(lua_State* L)
 {
 	CProjectile* proj = ParseProjectile(L, __FUNCTION__, 1);
-	if (proj == NULL) {
-		return 0;
-	}
 
-	if (!proj->weapon && !proj->piece) {
+	if (proj == NULL)
 		return 0;
-	}
+	if (!proj->weapon && !proj->piece)
+		return 0;
 
 	proj->luaMoveCtrl = (lua_isboolean(L, 2) && lua_toboolean(L, 2));
 	return 0;
@@ -2621,9 +2677,9 @@ int LuaSyncedCtrl::SetProjectileMoveControl(lua_State* L)
 int LuaSyncedCtrl::SetProjectilePosition(lua_State* L)
 {
 	CProjectile* proj = ParseProjectile(L, __FUNCTION__, 1);
-	if (proj == NULL) {
+
+	if (proj == NULL)
 		return 0;
-	}
 
 	proj->pos.x = luaL_optfloat(L, 2, 0.0f);
 	proj->pos.y = luaL_optfloat(L, 3, 0.0f);
@@ -2635,9 +2691,9 @@ int LuaSyncedCtrl::SetProjectilePosition(lua_State* L)
 int LuaSyncedCtrl::SetProjectileVelocity(lua_State* L)
 {
 	CProjectile* proj = ParseProjectile(L, __FUNCTION__, 1);
-	if (proj == NULL) {
+
+	if (proj == NULL)
 		return 0;
-	}
 
 	proj->speed.x = luaL_optfloat(L, 2, 0.0f);
 	proj->speed.y = luaL_optfloat(L, 3, 0.0f);
@@ -2652,11 +2708,76 @@ int LuaSyncedCtrl::SetProjectileVelocity(lua_State* L)
 int LuaSyncedCtrl::SetProjectileCollision(lua_State* L)
 {
 	CProjectile* proj = ParseProjectile(L, __FUNCTION__, 1);
-	if (proj == NULL) {
+
+	if (proj == NULL)
 		return 0;
-	}
 
 	proj->Collision();
+	return 0;
+}
+
+int LuaSyncedCtrl::SetProjectileTarget(lua_State* L)
+{
+	CProjectile* pro = ParseProjectile(L, __FUNCTION__, 1);
+	CWeaponProjectile* wpro = NULL;
+
+	if (pro == NULL)
+		return 0;
+	if (!pro->weapon)
+		return 0;
+
+	wpro = static_cast<CWeaponProjectile*>(pro);
+
+	switch (lua_gettop(L)) {
+		case 3: {
+			const int id = luaL_checkint(L, 2);
+			const char* type = luaL_checkstring(L, 3);
+
+			if ((type == NULL) || ((*type) == 0))
+				return 0;
+
+			CWorldObject* oldTargetObject = wpro->GetTargetObject();
+			CWorldObject* newTargetObject = NULL;
+
+			switch (type[0]) {
+				case 'u': { newTargetObject = ParseUnit(L, __FUNCTION__, 2); } break;
+				case 'f': { newTargetObject = ParseFeature(L, __FUNCTION__, 2); } break;
+				case 'p': { newTargetObject = ParseProjectile(L, __FUNCTION__, 2); } break;
+			}
+
+			const DependenceType oldDepType =
+				(dynamic_cast<     CSolidObject*>(oldTargetObject) != NULL)? DEPENDENCE_WEAPONTARGET:
+				(dynamic_cast<CWeaponProjectile*>(oldTargetObject) != NULL)? DEPENDENCE_INTERCEPTTARGET:
+				DEPENDENCE_NONE;
+			const DependenceType newDepType =
+				(dynamic_cast<     CSolidObject*>(newTargetObject) != NULL)? DEPENDENCE_WEAPONTARGET:
+				(dynamic_cast<CWeaponProjectile*>(newTargetObject) != NULL)? DEPENDENCE_INTERCEPTTARGET:
+				DEPENDENCE_NONE;
+
+			if (oldTargetObject != NULL) {
+				wpro->DeleteDeathDependence(oldTargetObject, oldDepType);
+				wpro->SetTargetObject(NULL);
+			}
+			if (newTargetObject != NULL) {
+				wpro->AddDeathDependence(newTargetObject, newDepType);
+				wpro->SetTargetObject(newTargetObject);
+			}
+
+			assert(newTargetObject == NULL || newTargetObject->id == id);
+			lua_pushboolean(L, oldTargetObject != NULL || newTargetObject != NULL);
+			return 1;
+		} break;
+
+		case 4: {
+			if (wpro->GetTargetObject() == NULL) {
+				wpro->SetTargetPos(float3(luaL_checkfloat(L, 2), luaL_checkfloat(L, 3), luaL_checkfloat(L, 4)));
+			}
+
+			lua_pushboolean(L, wpro->GetTargetObject() == NULL);
+			return 1;
+		} break;
+	}
+
 	return 0;
 }
 
@@ -2664,9 +2785,9 @@ int LuaSyncedCtrl::SetProjectileCollision(lua_State* L)
 int LuaSyncedCtrl::SetProjectileGravity(lua_State* L)
 {
 	CProjectile* proj = ParseProjectile(L, __FUNCTION__, 1);
-	if (proj == NULL) {
+
+	if (proj == NULL)
 		return 0;
-	}
 
 	proj->mygravity = luaL_optfloat(L, 2, 0.0f);
 	return 0;
@@ -2675,11 +2796,11 @@ int LuaSyncedCtrl::SetProjectileGravity(lua_State* L)
 int LuaSyncedCtrl::SetProjectileSpinAngle(lua_State* L)
 {
 	CProjectile* proj = ParseProjectile(L, __FUNCTION__, 1);
-	if (proj == NULL || !proj->piece) {
-		return 0;
-	}
 
-	CPieceProjectile* pproj = dynamic_cast<CPieceProjectile*>(proj);
+	if (proj == NULL || !proj->piece)
+		return 0;
+
+	CPieceProjectile* pproj = static_cast<CPieceProjectile*>(proj);
 	pproj->spinAngle = luaL_optfloat(L, 2, 0.0f);
 	return 0;
 }
@@ -2687,11 +2808,11 @@ int LuaSyncedCtrl::SetProjectileSpinAngle(lua_State* L)
 int LuaSyncedCtrl::SetProjectileSpinSpeed(lua_State* L)
 {
 	CProjectile* proj = ParseProjectile(L, __FUNCTION__, 1);
-	if (proj == NULL || !proj->piece) {
-		return 0;
-	}
 
-	CPieceProjectile* pproj = dynamic_cast<CPieceProjectile*>(proj);
+	if (proj == NULL || !proj->piece)
+		return 0;
+
+	CPieceProjectile* pproj = static_cast<CPieceProjectile*>(proj);
 	pproj->spinSpeed = luaL_optfloat(L, 2, 0.0f);
 	return 0;
 }
@@ -2699,11 +2820,11 @@ int LuaSyncedCtrl::SetProjectileSpinSpeed(lua_State* L)
 int LuaSyncedCtrl::SetProjectileSpinVec(lua_State* L)
 {
 	CProjectile* proj = ParseProjectile(L, __FUNCTION__, 1);
-	if (proj == NULL || !proj->piece) {
-		return 0;
-	}
 
-	CPieceProjectile* pproj = dynamic_cast<CPieceProjectile*>(proj);
+	if (proj == NULL || !proj->piece)
+		return 0;
+
+	CPieceProjectile* pproj = static_cast<CPieceProjectile*>(proj);
 	pproj->spinVec.x = luaL_optfloat(L, 2, 0.0f);
 	pproj->spinVec.y = luaL_optfloat(L, 3, 0.0f);
 	pproj->spinVec.z = luaL_optfloat(L, 4, 0.0f);
@@ -2714,20 +2835,20 @@ int LuaSyncedCtrl::SetProjectileSpinVec(lua_State* L)
 int LuaSyncedCtrl::SetProjectileCEG(lua_State* L)
 {
 	CProjectile* proj = ParseProjectile(L, __FUNCTION__, 1);
-	if (proj == NULL) {
+
+	if (proj == NULL)
 		return 0;
-	}
 
 	assert(proj->weapon || proj->piece);
 
 	if (proj->weapon) {
-		CWeaponProjectile* wproj = dynamic_cast<CWeaponProjectile*>(proj);
+		CWeaponProjectile* wproj = static_cast<CWeaponProjectile*>(proj);
 		if (wproj != NULL) {
 			wproj->cegID = gCEG->Load(explGenHandler, luaL_checkstring(L, 2));
 		}
 	}
 	if (proj->piece) {
-		CPieceProjectile* pproj = dynamic_cast<CPieceProjectile*>(proj);
+		CPieceProjectile* pproj = static_cast<CPieceProjectile*>(proj);
 		if (pproj != NULL) {
 			pproj->cegID = gCEG->Load(explGenHandler, luaL_checkstring(L, 2));
 		}
@@ -3484,6 +3605,20 @@ int LuaSyncedCtrl::SetTerrainTypeData(lua_State* L)
 
 /******************************************************************************/
 /******************************************************************************/
+
+int LuaSyncedCtrl::SpawnProjectile(lua_State* L)
+{
+	ProjectileParams params;
+
+	if ((params.weaponDef = weaponDefHandler->GetWeaponDefByID(luaL_checkint(L, 1))) == NULL) {
+		return 0;
+	}
+
+	ParseProjectileParams(L, params, 2, __FUNCTION__);
+
+	lua_pushnumber(L, WeaponProjectileFactory::LoadProjectile(params));
+	return 1;
+}
 
 int LuaSyncedCtrl::SpawnCEG(lua_State* L)
 {

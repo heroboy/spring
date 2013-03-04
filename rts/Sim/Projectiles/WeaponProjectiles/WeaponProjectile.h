@@ -4,30 +4,48 @@
 #define WEAPON_PROJECTILE_H
 
 #include "Sim/Projectiles/Projectile.h"
+#include "WeaponProjectileTypes.h"
 
 struct WeaponDef;
 class CPlasmaRepulser;
 class CWeaponProjectile;
-class CWeapon;
 
 struct ProjectileParams {
 	ProjectileParams()
-		: ttl(0)
-		, target(NULL)
+		: target(NULL)
 		, owner(NULL)
-		, weapon(NULL)
 		, weaponDef(NULL)
+
+		, ttl(0)
+		, gravity(0.0f)
+		, tracking(0.0f)
+		, maxRange(0.0f)
+
+		, startAlpha(0.0f)
+		, endAlpha(1.0f)
 	{
 	}
 
-	int ttl;
 	float3 pos;
 	float3 end;
 	float3 speed;
-	CWorldObject* target; // unit, feature or weapon projectile to intercept
+	float3 spread;
+	float3 error;
+
+	// unit, feature or weapon projectile to intercept
+	CWorldObject* target;
 	CUnit* owner;
-	CWeapon* weapon;
+
 	const WeaponDef* weaponDef;
+
+	int ttl;
+	float gravity;
+	float tracking;
+	float maxRange;
+
+	// BeamLaser-specific junk
+	float startAlpha;
+	float endAlpha;
 };
 
 
@@ -39,21 +57,6 @@ class CWeaponProjectile : public CProjectile
 {
 	CR_DECLARE(CWeaponProjectile);
 public:
-	enum {
-		WEAPON_BASE_PROJECTILE           = (1 <<  0),
-		WEAPON_BEAMLASER_PROJECTILE      = (1 <<  1),
-		WEAPON_EMG_PROJECTILE            = (1 <<  2),
-		WEAPON_EXPLOSIVE_PROJECTILE      = (1 <<  3),
-		WEAPON_FIREBALL_PROJECTILE       = (1 <<  4),
-		WEAPON_FLAME_PROJECTILE          = (1 <<  5),
-		WEAPON_LARGEBEAMLASER_PROJECTILE = (1 <<  6),
-		WEAPON_LASER_PROJECTILE          = (1 <<  7),
-		WEAPON_LIGHTNING_PROJECTILE      = (1 <<  8),
-		WEAPON_MISSILE_PROJECTILE        = (1 <<  9),
-		WEAPON_STARBURST_PROJECTILE      = (1 << 10),
-		WEAPON_TORPEDO_PROJECTILE        = (1 << 11),
-	};
-
 	CWeaponProjectile();
 	CWeaponProjectile(const ProjectileParams& params, const bool isRay = false);
 	virtual ~CWeaponProjectile();
@@ -67,6 +70,26 @@ public:
 
 	virtual void DrawOnMinimap(CVertexArray& lines, CVertexArray& points);
 
+	void DependentDied(CObject* o);
+	void PostLoad();
+
+	void SetTargetObject(CWorldObject* newTarget) {
+		if (newTarget != NULL) {
+			targetPos = newTarget->pos;
+		}
+
+		target = newTarget;
+	}
+
+	const CWorldObject* GetTargetObject() const { return target; }
+	      CWorldObject* GetTargetObject()       { return target; }
+
+	void SetStartPos(const float3& newStartPos) { startpos = newStartPos; }
+	void SetTargetPos(const float3& newTargetPos) { targetPos = newTargetPos; }
+
+	const float3& GetStartPos() const { return startpos; }
+	const float3& GetTargetPos() const { return targetPos; }
+
 protected:
 	void UpdateInterception();
 	virtual void UpdateGroundBounce();
@@ -77,24 +100,20 @@ public:
 	bool targeted;
 	const WeaponDef* weaponDef;
 
-	CWorldObject* target;
-	float3 targetPos;
-
 	unsigned int weaponDefID;
 	unsigned int cegID;
 
 	int colorTeam;
 
 protected:
+	CWorldObject* target;
+
 	float3 startpos;
+	float3 targetPos;
 
 	int ttl;
 	int bounces;
 	bool keepBouncing;
-
-public:
-	void DependentDied(CObject* o);
-	void PostLoad();
 };
 
 #endif /* WEAPON_PROJECTILE_H */

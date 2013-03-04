@@ -250,8 +250,8 @@ void CWeapon::UpdateRelWeaponPos()
 
 void CWeapon::Update()
 {
-	UpdateStockpile();
-	if (weaponDef->stockpile && numStockpiled <= 0 && salvoLeft <= 0) return;
+	if (!UpdateStockpile())
+		return;
 
 	UpdateTargeting();
 	UpdateFire();
@@ -441,29 +441,37 @@ void CWeapon::UpdateFire()
 }
 
 
-void CWeapon::UpdateStockpile()
+bool CWeapon::UpdateStockpile()
 {
-	if (weaponDef->stockpile && numStockpileQued) {
-		const float p = 1.0f / stockpileTime;
+	if (weaponDef->stockpile) {
+		if (numStockpileQued > 0) {
+			const float p = 1.0f / stockpileTime;
 
-		if (teamHandler->Team(owner->team)->metal >= metalFireCost*p && teamHandler->Team(owner->team)->energy >= energyFireCost*p) {
-			owner->UseEnergy(energyFireCost * p);
-			owner->UseMetal(metalFireCost * p);
-			buildPercent += p;
-		} else {
-			// update the energy and metal required counts
-			teamHandler->Team(owner->team)->energyPull += energyFireCost * p;
-			teamHandler->Team(owner->team)->metalPull += metalFireCost * p;
+			if (teamHandler->Team(owner->team)->metal >= metalFireCost*p && teamHandler->Team(owner->team)->energy >= energyFireCost*p) {
+				owner->UseEnergy(energyFireCost * p);
+				owner->UseMetal(metalFireCost * p);
+				buildPercent += p;
+			} else {
+				// update the energy and metal required counts
+				teamHandler->Team(owner->team)->energyPull += (energyFireCost * p);
+				teamHandler->Team(owner->team)->metalPull += (metalFireCost * p);
+			}
+			if (buildPercent >= 1) {
+				const int oldCount = numStockpiled;
+				buildPercent = 0;
+				numStockpileQued--;
+				numStockpiled++;
+				owner->commandAI->StockpileChanged(this);
+				eventHandler.StockpileChanged(owner, this, oldCount);
+			}
 		}
-		if (buildPercent >= 1) {
-			const int oldCount = numStockpiled;
-			buildPercent=0;
-			numStockpileQued--;
-			numStockpiled++;
-			owner->commandAI->StockpileChanged(this);
-			eventHandler.StockpileChanged(owner, this, oldCount);
+
+		if (numStockpiled <= 0 && salvoLeft <= 0) {
+			return false;
 		}
 	}
+
+	return true;
 }
 
 
@@ -1073,7 +1081,7 @@ bool CWeapon::TryTarget(const float3& tgtPos, bool userTarget, const CUnit* targ
 		return false;
 
 	//FIXME add a forcedUserTarget (a forced fire mode enabled with ctrl key or something) and skip the tests below then
-	return HaveFreeLineOfFire(tgtPos, userTarget, targetUnit);
+	return (HaveFreeLineOfFire(tgtPos, userTarget, targetUnit));
 }
 
 
@@ -1353,7 +1361,7 @@ ProjectileParams CWeapon::GetProjectileParams()
 	params.target = targetUnit;
 	params.weaponDef = weaponDef;
 	params.owner = owner;
-	params.weapon = this;
+
 	if (interceptTarget) {
 		params.target = interceptTarget;
 	}

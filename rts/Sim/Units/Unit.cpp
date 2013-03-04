@@ -2487,13 +2487,7 @@ void CUnit::QueMoveUnit(CSolidObject *o, const float3& vec, bool rel, bool terrc
 		ASSERT_THREAD_OWNS_UNIT();
 		delayOps.push_back(DelayOp(MOVE_UNIT, o, vec, rel, terrcheck));
 	} else {
-#if 0
-		#define POS_IMPASSABLE(md, pos, u)                                               \
-			(((CMoveMath::IsBlocked(*md, pos, u) & CMoveMath::BLOCK_STRUCTURE) != 0) ||  \
-			 ((CMoveMath::GetPosSpeedMod(*md, pos) <= 0.01f)))
-#else
 		#define POS_IMPASSABLE(md, pos, u) (!md->TestMoveSquare(u, (pos).x / SQUARE_SIZE, (pos).z / SQUARE_SIZE))
-#endif
 		const CUnit *u = static_cast<const CUnit *>(o);
 		if (!terrcheck || !POS_IMPASSABLE(u->moveDef, rel ? u->pos + vec : vec, u))
 			o->Move3D(vec, rel);
